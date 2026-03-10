@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  codex-mem-worker:
+    build:
+      context: ../codex-mem
+      dockerfile: Dockerfile
+    container_name: codex-mem-worker
+    restart: unless-stopped
+    command: ["worker", "--json"]
+    environment:
+      - CODEX_HOME=/data/codex
+      - CODEX_MEM_DATA_DIR=/data/mem
+    volumes:
+      - codex-mem-data:/data/mem
+      - ${CODEX_HOME:-~/.codex}:/data/codex:ro
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('fs').accessSync('/data/mem/codex-mem.db')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  codex-mem-dashboard:
+    build:
+      context: ../codex-mem
+      dockerfile: Dockerfile
+    container_name: codex-mem-dashboard
+    restart: unless-stopped
+    command: ["dashboard", "--host", "0.0.0.0", "--port", "3939"]
+    environment:
+      - CODEX_HOME=/data/codex
+      - CODEX_MEM_DATA_DIR=/data/mem
+    volumes:
+      - codex-mem-data:/data/mem
+      - ${CODEX_HOME:-~/.codex}:/data/codex:ro
+    ports:
+      - "3939:3939"
+    depends_on:
+      codex-mem-worker:
+        condition: service_healthy
+
+volumes:
+  codex-mem-data:
+    driver: local
