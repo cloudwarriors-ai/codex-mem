@@ -105,6 +105,205 @@ describe("MemoryService", () => {
     }
   });
 
+  it("resolves preferences deterministically by scope, confidence, and timestamp", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:frontend.iteration_size",
+        scope: "project",
+        trigger: "When changing UI",
+        preferred: "One UI region per iteration",
+        avoid: "Multi-region rewrites",
+        example_good: "Update settings panel only",
+        example_bad: "Rewrite all routes together",
+        confidence: 0.7,
+        source: "user",
+        supersedes: [],
+        created_at: "2026-03-01T00:00:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:frontend.iteration_size",
+        scope: "workspace",
+        trigger: "When changing UI",
+        preferred: "Two components at a time",
+        avoid: "Global UI rewrites",
+        example_good: "Update header + footer",
+        example_bad: "Rewrite design system in one pass",
+        confidence: 0.99,
+        source: "session",
+        supersedes: [],
+        created_at: "2026-03-01T00:05:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:frontend.iteration_size",
+        scope: "user",
+        trigger: "When changing UI",
+        preferred: "Single region with visual checkpoints",
+        avoid: "Large multi-route updates",
+        example_good: "Update one card and re-check visual output",
+        example_bad: "Update all pages without checkpoints",
+        confidence: 0.2,
+        source: "user",
+        supersedes: [],
+        created_at: "2026-03-01T00:10:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:tests.order",
+        scope: "project",
+        trigger: "When adding non-trivial code",
+        preferred: "Run typecheck, tests, then lint",
+        avoid: "Skipping typecheck before tests",
+        example_good: "tsc -> vitest -> lint",
+        example_bad: "lint only",
+        confidence: 0.6,
+        source: "session",
+        supersedes: [],
+        created_at: "2026-03-01T00:00:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:tests.order",
+        scope: "project",
+        trigger: "When adding non-trivial code",
+        preferred: "Run tests then typecheck then lint",
+        avoid: "Skipping test run",
+        example_good: "vitest -> tsc -> lint",
+        example_bad: "commit without tests",
+        confidence: 0.6,
+        source: "session",
+        supersedes: [],
+        created_at: "2026-03-01T00:20:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      const resolved = await service.resolvePreferences({
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      const frontend = resolved.find((item) => item.key === "pref:frontend.iteration_size");
+      expect(frontend?.selected.scope).toBe("user");
+      expect(frontend?.selected.preferred).toContain("Single region");
+
+      const testOrder = resolved.find((item) => item.key === "pref:tests.order");
+      expect(testOrder?.selected.created_at).toBe("2026-03-01T00:20:00.000Z");
+      expect(testOrder?.ignored.length).toBeGreaterThan(0);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("handles supersedes chains and keeps only active preferences by default", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      const baseId = await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:review.style",
+        scope: "global",
+        trigger: "When writing review summaries",
+        preferred: "Brief summary first",
+        avoid: "Long narrative upfront",
+        example_good: "Findings first",
+        example_bad: "Long intro",
+        confidence: 0.5,
+        source: "imported",
+        supersedes: [],
+        created_at: "2026-03-01T00:00:00.000Z",
+      });
+
+      const projectId = await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:review.style",
+        scope: "project",
+        trigger: "When writing review summaries",
+        preferred: "Findings list with severity ordering",
+        avoid: "High-level only comments",
+        example_good: "P1/P2 findings list",
+        example_bad: "No severity",
+        confidence: 0.8,
+        source: "user",
+        supersedes: [String(baseId)],
+        created_at: "2026-03-01T00:05:00.000Z",
+      });
+
+      const userId = await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:review.style",
+        scope: "user",
+        trigger: "When writing review summaries",
+        preferred: "Findings first with file:line",
+        avoid: "Missing code references",
+        example_good: "P1 with file path and line",
+        example_bad: "Vague comment",
+        confidence: 0.9,
+        source: "user",
+        supersedes: [String(projectId)],
+        created_at: "2026-03-01T00:10:00.000Z",
+      });
+
+      const active = await service.listPreferences({ key: "pref:review.style" });
+      expect(active.length).toBe(1);
+      expect(active[0]?.id).toBe(userId);
+
+      const withSuperseded = await service.listPreferences({
+        key: "pref:review.style",
+        includeSuperseded: true,
+      });
+      expect(withSuperseded.length).toBe(3);
+
+      const resolved = await service.resolvePreferences({ keys: ["pref:review.style"] });
+      expect(resolved.length).toBe(1);
+      expect(resolved[0]?.selected.id).toBe(userId);
+      expect(resolved[0]?.ignored.length).toBe(0);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("blocks secret-like preference payloads", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await expect(
+        service.savePreference({
+          schema_version: "pref-note.v1",
+          key: "pref:security.example",
+          scope: "user",
+          trigger: "When saving secure examples",
+          preferred: "Never store authorization: Bearer sk-123456789012345678901234",
+          avoid: "Store tokens in notes",
+          example_good: "Use placeholders only",
+          example_bad: "token=abcdef1234567890",
+          confidence: 0.9,
+          source: "user",
+          supersedes: [],
+          created_at: "2026-03-01T01:00:00.000Z",
+        }),
+      ).rejects.toThrow("secret-like");
+    } finally {
+      service.close();
+    }
+  });
+
   it("builds stats, project/session summaries, and context packs", async () => {
     const paths = createFixture();
     seedCodexLogs(paths.codexHome);
@@ -159,6 +358,43 @@ describe("MemoryService", () => {
         cwd: "/Users/chadsimon/code/my-project",
       });
       expect(punctuatedSearch.some((row) => row.title.includes("follow-up"))).toBe(true);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("includes resolved preferences in context packs", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:frontend.mobile_required",
+        scope: "project",
+        trigger: "When shipping UI updates",
+        preferred: "Always verify desktop and mobile layouts",
+        avoid: "Desktop-only validation",
+        example_good: "Run viewport checks for 390px and 1440px",
+        example_bad: "No responsive check",
+        confidence: 0.95,
+        source: "user",
+        supersedes: [],
+        created_at: "2026-03-01T00:00:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      const contextPack = await service.buildContextPack({
+        cwd: "/Users/chadsimon/code/my-project",
+        preferenceKeys: ["pref:frontend.mobile_required"],
+        preferenceLimit: 3,
+      });
+
+      expect(contextPack.resolvedPreferences.length).toBeGreaterThan(0);
+      expect(contextPack.resolvedPreferences[0]?.key).toBe("pref:frontend.mobile_required");
+      expect(contextPack.markdown).toContain("## Resolved Preferences");
+      expect(contextPack.markdown).toContain("pref:frontend.mobile_required");
     } finally {
       service.close();
     }

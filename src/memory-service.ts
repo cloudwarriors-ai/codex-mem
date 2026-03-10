@@ -1,15 +1,21 @@
 import { MemoryRepository } from "./db.js";
 import { CodexImporter } from "./importer.js";
-import { buildFtsQuery, createTitle, nowIso } from "./utils.js";
+import { preferenceNoteV1Schema } from "./contracts.js";
+import { buildFtsQuery, createTitle, nowIso, safeJsonParse } from "./utils.js";
 import type {
   BuildContextOptions,
   ContextPack,
+  ListPreferencesOptions,
   MemoryPaths,
   MemoryStats,
   ObservationRecord,
   ObservationType,
+  PreferenceNote,
+  PreferenceRecord,
   ProjectListOptions,
   ProjectSummary,
+  ResolvePreferencesOptions,
+  ResolvedPreference,
   SearchOptions,
   SessionListOptions,
   SessionSummary,
@@ -17,6 +23,35 @@ import type {
   SyncResult,
   TimelineOptions,
 } from "./types.js";
+
+const SCOPE_RANK: Record<PreferenceNote["scope"], number> = {
+  user: 4,
+  project: 3,
+  workspace: 2,
+  global: 1,
+};
+
+const SECRET_PATTERNS = [
+  /api[_-]?key\s*[=:]\s*[A-Za-z0-9._-]{8,}/i,
+  /token\s*[=:]\s*[A-Za-z0-9._-]{8,}/i,
+  /secret\s*[=:]\s*[A-Za-z0-9._-]{8,}/i,
+  /password\s*[=:]\s*\S+/i,
+  /authorization\s*:\s*bearer\s+\S+/i,
+  /sk-[A-Za-z0-9]{20,}/,
+];
+
+interface SaveMemoryInput {
+  text: string;
+  title?: string | undefined;
+  cwd?: string | undefined;
+  metadataJson?: string | undefined;
+}
+
+type SavePreferenceInput = Omit<PreferenceNote, "created_at"> & {
+  created_at?: string | undefined;
+  cwd?: string | undefined;
+  title?: string | undefined;
+};
 
 export class MemoryService {
   private readonly repo: MemoryRepository;
@@ -74,11 +109,7 @@ export class MemoryService {
     return this.repo.listSessions(options);
   }
 
-  async saveMemory(input: {
-    text: string;
-    title?: string | undefined;
-    cwd?: string | undefined;
-  }): Promise<number> {
+  async saveMemory(input: SaveMemoryInput): Promise<number> {
     const text = input.text.trim();
     if (!text) {
       throw new Error("Text cannot be empty");
@@ -89,11 +120,121 @@ export class MemoryService {
       text,
       title: input.title ?? createTitle(text),
       cwd: input.cwd,
+      metadataJson: input.metadataJson,
       createdAt: timestamp,
       createdAtEpoch: new Date(timestamp).getTime(),
     });
 
     return id;
+  }
+
+  async savePreference(input: SavePreferenceInput): Promise<number> {
+    const createdAt = input.created_at ?? nowIso();
+    const payload: PreferenceNote = {
+      schema_version: "pref-note.v1",
+      key: input.key,
+      scope: input.scope,
+      trigger: input.trigger,
+      preferred: input.preferred,
+      avoid: input.avoid,
+      example_good: input.example_good,
+      example_bad: input.example_bad,
+      confidence: input.confidence,
+      source: input.source,
+      supersedes: [...input.supersedes],
+      created_at: createdAt,
+    };
+
+    this.assertNoSecretLikeData(payload);
+
+    const text = [
+      `Preference: ${payload.key}`,
+      `Scope: ${payload.scope}`,
+      `Trigger: ${payload.trigger}`,
+      `Preferred: ${payload.preferred}`,
+      `Avoid: ${payload.avoid}`,
+    ].join("\n");
+
+    const metadataJson = JSON.stringify(payload);
+
+    return this.saveMemory({
+      text,
+      title: input.title ?? `${payload.key} (${payload.scope})`,
+      cwd: input.cwd,
+      metadataJson,
+    });
+  }
+
+  async listPreferences(options?: ListPreferencesOptions): Promise<PreferenceRecord[]> {
+    await this.ensureFreshSync(false);
+
+    const limit = options?.limit ?? 100;
+    const rows = this.repo.search({
+      cwd: options?.cwd,
+      type: "manual_note",
+      limit,
+    });
+
+    const all = rows
+      .map((row) => toPreferenceRecord(row))
+      .filter((row): row is PreferenceRecord => row !== null);
+
+    const filtered = all.filter((row) => {
+      if (options?.key && row.key !== options.key) return false;
+      if (options?.scope && row.scope !== options.scope) return false;
+      return true;
+    });
+
+    const supersededBy = buildSupersededMap(filtered);
+    const includeSuperseded = options?.includeSuperseded ?? false;
+    const activeOnly = includeSuperseded
+      ? filtered
+      : filtered.filter((row) => !supersededBy.has(row.id));
+
+    return activeOnly
+      .sort((a, b) => b.observationCreatedAtEpoch - a.observationCreatedAtEpoch)
+      .slice(0, limit);
+  }
+
+  async resolvePreferences(options?: ResolvePreferencesOptions): Promise<ResolvedPreference[]> {
+    const outputLimit = options?.limit ?? 100;
+    const fetchLimit = Math.max(100, outputLimit);
+    const candidates = await this.listPreferences({
+      cwd: options?.cwd,
+      limit: fetchLimit,
+      includeSuperseded: true,
+    });
+
+    const supersededBy = buildSupersededMap(candidates);
+    const active = candidates.filter((row) => !supersededBy.has(row.id));
+
+    const keyFilter = new Set((options?.keys ?? []).map((key) => key.trim()).filter(Boolean));
+    const scoped =
+      keyFilter.size === 0 ? active : active.filter((row) => keyFilter.has(row.key));
+
+    const groups = new Map<string, PreferenceRecord[]>();
+    for (const pref of scoped) {
+      const list = groups.get(pref.key) ?? [];
+      list.push(pref);
+      groups.set(pref.key, list);
+    }
+
+    const resolved: ResolvedPreference[] = [];
+    for (const [key, entries] of groups.entries()) {
+      const ranked = [...entries].sort(comparePreferenceRank);
+      const selected = ranked[0];
+      if (!selected) continue;
+
+      resolved.push({
+        key,
+        selected,
+        ignored: ranked.slice(1),
+      });
+    }
+
+    return resolved
+      .sort((a, b) => comparePreferenceRank(a.selected, b.selected))
+      .slice(0, outputLimit);
   }
 
   async context(input: {
@@ -138,6 +279,12 @@ export class MemoryService {
       limit: 5,
     });
 
+    const resolvedPreferences = await this.resolvePreferences({
+      cwd,
+      keys: options?.preferenceKeys,
+      limit: options?.preferenceLimit ?? 5,
+    });
+
     const sessions = await this.sessions({
       cwd,
       limit: sessionLimit,
@@ -151,6 +298,7 @@ export class MemoryService {
       highlights,
       sessions,
       notes,
+      resolvedPreferences,
     });
 
     return {
@@ -160,8 +308,27 @@ export class MemoryService {
       highlights,
       sessions,
       notes,
+      resolvedPreferences,
       markdown,
     };
+  }
+
+  private assertNoSecretLikeData(preference: PreferenceNote): void {
+    const values = [
+      preference.trigger,
+      preference.preferred,
+      preference.avoid,
+      preference.example_good,
+      preference.example_bad,
+    ];
+
+    for (const value of values) {
+      for (const pattern of SECRET_PATTERNS) {
+        if (pattern.test(value)) {
+          throw new Error("Preference payload appears to include secret-like content");
+        }
+      }
+    }
   }
 
   private async ensureFreshSync(force: boolean): Promise<SyncResult> {
@@ -185,6 +352,83 @@ export class MemoryService {
       this.inFlightSync = null;
     }
   }
+}
+
+function comparePreferenceRank(a: PreferenceRecord, b: PreferenceRecord): number {
+  const scopeDelta = (SCOPE_RANK[b.scope] ?? 0) - (SCOPE_RANK[a.scope] ?? 0);
+  if (scopeDelta !== 0) return scopeDelta;
+
+  const confidenceDelta = b.confidence - a.confidence;
+  if (confidenceDelta !== 0) return confidenceDelta;
+
+  const createdA = parsePreferenceTime(a.created_at, a.observationCreatedAtEpoch);
+  const createdB = parsePreferenceTime(b.created_at, b.observationCreatedAtEpoch);
+  if (createdA !== createdB) return createdB - createdA;
+
+  return b.id - a.id;
+}
+
+function parsePreferenceTime(raw: string, fallbackEpoch: number): number {
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : fallbackEpoch;
+}
+
+function buildSupersededMap(preferences: PreferenceRecord[]): Map<number, string[]> {
+  const byId = new Map<number, PreferenceRecord>();
+  const byKey = new Map<string, PreferenceRecord[]>();
+  for (const pref of preferences) {
+    byId.set(pref.id, pref);
+    const list = byKey.get(pref.key) ?? [];
+    list.push(pref);
+    byKey.set(pref.key, list);
+  }
+
+  const supersededBy = new Map<number, string[]>();
+
+  for (const pref of preferences) {
+    for (const tokenRaw of pref.supersedes) {
+      const token = tokenRaw.trim();
+      if (!token) continue;
+
+      const id = Number.parseInt(token, 10);
+      if (Number.isInteger(id) && byId.has(id)) {
+        const current = supersededBy.get(id) ?? [];
+        current.push(`${pref.key}#${pref.id}`);
+        supersededBy.set(id, current);
+        continue;
+      }
+
+      const byKeyMatches = byKey.get(token);
+      if (byKeyMatches && byKeyMatches.length > 0) {
+        for (const match of byKeyMatches) {
+          const current = supersededBy.get(match.id) ?? [];
+          current.push(`${pref.key}#${pref.id}`);
+          supersededBy.set(match.id, current);
+        }
+      }
+    }
+  }
+
+  return supersededBy;
+}
+
+function toPreferenceRecord(row: ObservationRecord): PreferenceRecord | null {
+  if (row.type !== "manual_note") return null;
+  const metadata = safeJsonParse<unknown>(row.metadataJson);
+  if (!metadata) return null;
+
+  const parsed = preferenceNoteV1Schema.safeParse(metadata);
+  if (!parsed.success) return null;
+
+  const payload = parsed.data;
+  return {
+    ...payload,
+    id: row.id,
+    cwd: row.cwd,
+    title: row.title,
+    observationCreatedAt: row.createdAt,
+    observationCreatedAtEpoch: row.createdAtEpoch,
+  };
 }
 
 function shrink(text: string, maxLen: number): string {
@@ -211,6 +455,22 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
     }
   }
 
+  if (pack.resolvedPreferences.length > 0) {
+    lines.push("");
+    lines.push("## Resolved Preferences");
+    for (const pref of pack.resolvedPreferences) {
+      lines.push(`- ${pref.key}`);
+      lines.push(
+        `  - selected: ${pref.selected.scope} @ confidence=${pref.selected.confidence.toFixed(2)} (${pref.selected.created_at})`,
+      );
+      lines.push(`  - preferred: ${shrink(pref.selected.preferred, 140)}`);
+      lines.push(`  - avoid: ${shrink(pref.selected.avoid, 140)}`);
+      if (pref.ignored.length > 0) {
+        lines.push(`  - ignored: ${pref.ignored.length}`);
+      }
+    }
+  }
+
   if (pack.notes.length > 0) {
     lines.push("");
     lines.push("## Durable Notes");
@@ -223,9 +483,7 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
     lines.push("");
     lines.push("## Recent Sessions");
     for (const session of pack.sessions) {
-      lines.push(
-        `- ${session.sessionId} (${session.observationCount} obs) ${session.lastAt}`,
-      );
+      lines.push(`- ${session.sessionId} (${session.observationCount} obs) ${session.lastAt}`);
       if (session.cwd) lines.push(`  - cwd: ${session.cwd}`);
       if (session.lastTitle) lines.push(`  - last: ${shrink(session.lastTitle, 140)}`);
     }

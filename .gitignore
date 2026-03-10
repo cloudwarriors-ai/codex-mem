@@ -2,3 +2,4 @@ node_modules/
 dist/
 .codex-mem-test/
 *.log
+.docker/

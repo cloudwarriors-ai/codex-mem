@@ -45,6 +45,69 @@ export const saveMemoryInputSchema = z.object({
 
 export type SaveMemoryInput = z.infer<typeof saveMemoryInputSchema>;
 
+export const PREFERENCE_SCOPES = ["user", "project", "workspace", "global"] as const;
+export type PreferenceScope = (typeof PREFERENCE_SCOPES)[number];
+export const preferenceScopeSchema = z.enum(PREFERENCE_SCOPES);
+
+export const PREFERENCE_SOURCES = ["user", "session", "system", "imported"] as const;
+export type PreferenceSource = (typeof PREFERENCE_SOURCES)[number];
+export const preferenceSourceSchema = z.enum(PREFERENCE_SOURCES);
+
+const preferenceKeySchema = z
+  .string()
+  .trim()
+  .min(6)
+  .regex(/^pref:[a-z0-9][a-z0-9._-]*$/i, "Preference key must use pref:<domain> format");
+
+const preferenceTextSchema = z.string().trim().min(3);
+
+export const preferenceNoteV1Schema = z.object({
+  schema_version: z.literal("pref-note.v1"),
+  key: preferenceKeySchema,
+  scope: preferenceScopeSchema,
+  trigger: preferenceTextSchema,
+  preferred: preferenceTextSchema,
+  avoid: preferenceTextSchema,
+  example_good: preferenceTextSchema,
+  example_bad: preferenceTextSchema,
+  confidence: z.number().min(0).max(1),
+  source: preferenceSourceSchema,
+  supersedes: z.array(z.string().trim().min(1)).max(100),
+  created_at: z.string().datetime({ offset: true }),
+});
+
+export type PreferenceNoteV1 = z.infer<typeof preferenceNoteV1Schema>;
+
+export const savePreferenceInputSchema = preferenceNoteV1Schema
+  .omit({
+    created_at: true,
+  })
+  .extend({
+    created_at: z.string().datetime({ offset: true }).optional(),
+    cwd: z.string().trim().min(1).optional(),
+    title: z.string().trim().min(1).optional(),
+  });
+
+export type SavePreferenceInput = z.infer<typeof savePreferenceInputSchema>;
+
+export const listPreferencesInputSchema = z.object({
+  cwd: z.string().trim().min(1).optional(),
+  key: preferenceKeySchema.optional(),
+  scope: preferenceScopeSchema.optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+  include_superseded: z.boolean().optional(),
+});
+
+export type ListPreferencesInput = z.infer<typeof listPreferencesInputSchema>;
+
+export const resolvePreferencesInputSchema = z.object({
+  cwd: z.string().trim().min(1).optional(),
+  keys: z.array(preferenceKeySchema).min(1).max(200).optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export type ResolvePreferencesInput = z.infer<typeof resolvePreferencesInputSchema>;
+
 export const contextInputSchema = z.object({
   query: z.string().min(1).optional(),
   cwd: z.string().min(1).optional(),
@@ -69,6 +132,10 @@ export type DashboardContextParams = z.infer<typeof dashboardContextParamsSchema
 export const dashboardSaveMemoryBodySchema = saveMemoryInputSchema;
 
 export type DashboardSaveMemoryBody = z.infer<typeof dashboardSaveMemoryBodySchema>;
+
+export const dashboardSavePreferenceBodySchema = savePreferenceInputSchema;
+
+export type DashboardSavePreferenceBody = z.infer<typeof dashboardSavePreferenceBodySchema>;
 
 export const dashboardBatchBodySchema = getObservationsInputSchema;
 
@@ -98,6 +165,8 @@ export const buildContextInputSchema = z.object({
   cwd: z.string().min(1).optional(),
   limit: z.number().int().min(1).max(100).optional(),
   sessionLimit: z.number().int().min(1).max(50).optional(),
+  preferenceKeys: z.array(preferenceKeySchema).min(1).max(100).optional(),
+  preferenceLimit: z.number().int().min(1).max(100).optional(),
 });
 
 export type BuildContextInput = z.infer<typeof buildContextInputSchema>;

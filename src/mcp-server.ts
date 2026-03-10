@@ -3,8 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   buildContextInputSchema,
   getObservationsInputSchema,
+  listPreferencesInputSchema,
   projectListParamsSchema,
+  resolvePreferencesInputSchema,
   saveMemoryInputSchema,
+  savePreferenceInputSchema,
   searchInputSchema,
   sessionListParamsSchema,
   statsParamsSchema,
@@ -153,6 +156,152 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
   );
 
   server.registerTool(
+    "save_preference",
+    {
+      description:
+        "Save a structured preference note (pref-note.v1). Params: key, scope, trigger, preferred, avoid, example_good, example_bad, confidence, source, supersedes, created_at, cwd, title",
+      inputSchema: {
+        schema_version: savePreferenceInputSchema.shape.schema_version,
+        key: savePreferenceInputSchema.shape.key,
+        scope: savePreferenceInputSchema.shape.scope,
+        trigger: savePreferenceInputSchema.shape.trigger,
+        preferred: savePreferenceInputSchema.shape.preferred,
+        avoid: savePreferenceInputSchema.shape.avoid,
+        example_good: savePreferenceInputSchema.shape.example_good,
+        example_bad: savePreferenceInputSchema.shape.example_bad,
+        confidence: savePreferenceInputSchema.shape.confidence,
+        source: savePreferenceInputSchema.shape.source,
+        supersedes: savePreferenceInputSchema.shape.supersedes,
+        created_at: savePreferenceInputSchema.shape.created_at,
+        cwd: savePreferenceInputSchema.shape.cwd,
+        title: savePreferenceInputSchema.shape.title,
+      },
+    },
+    async ({
+      schema_version,
+      key,
+      scope,
+      trigger,
+      preferred,
+      avoid,
+      example_good,
+      example_bad,
+      confidence,
+      source,
+      supersedes,
+      created_at,
+      cwd,
+      title,
+    }) => {
+      try {
+        const input = savePreferenceInputSchema.parse({
+          schema_version,
+          key,
+          scope,
+          trigger,
+          preferred,
+          avoid,
+          example_good,
+          example_bad,
+          confidence,
+          source,
+          supersedes,
+          created_at,
+          cwd,
+          title,
+        });
+        const id = await service.savePreference(input);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ status: "saved", id }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_preferences",
+    {
+      description:
+        "List stored pref-note.v1 entries. Params: cwd, key, scope, limit, include_superseded",
+      inputSchema: {
+        cwd: listPreferencesInputSchema.shape.cwd,
+        key: listPreferencesInputSchema.shape.key,
+        scope: listPreferencesInputSchema.shape.scope,
+        limit: listPreferencesInputSchema.shape.limit,
+        include_superseded: listPreferencesInputSchema.shape.include_superseded,
+      },
+    },
+    async ({ cwd, key, scope, limit, include_superseded }) => {
+      try {
+        const input = listPreferencesInputSchema.parse({
+          cwd,
+          key,
+          scope,
+          limit,
+          include_superseded,
+        });
+        const preferences = await service.listPreferences({
+          cwd: input.cwd,
+          key: input.key,
+          scope: input.scope,
+          limit: input.limit,
+          includeSuperseded: input.include_superseded,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ preferences }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "resolve_preferences",
+    {
+      description:
+        "Resolve active preferences by deterministic precedence. Params: cwd, keys, limit",
+      inputSchema: {
+        cwd: resolvePreferencesInputSchema.shape.cwd,
+        keys: resolvePreferencesInputSchema.shape.keys,
+        limit: resolvePreferencesInputSchema.shape.limit,
+      },
+    },
+    async ({ cwd, keys, limit }) => {
+      try {
+        const input = resolvePreferencesInputSchema.parse({ cwd, keys, limit });
+        const resolved = await service.resolvePreferences({
+          cwd: input.cwd,
+          keys: input.keys,
+          limit: input.limit,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ resolved }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "stats",
     {
       description: "Get memory counts and coverage stats. Params: cwd",
@@ -241,15 +390,19 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         cwd: buildContextInputSchema.shape.cwd,
         limit: buildContextInputSchema.shape.limit,
         sessionLimit: buildContextInputSchema.shape.sessionLimit,
+        preferenceKeys: buildContextInputSchema.shape.preferenceKeys,
+        preferenceLimit: buildContextInputSchema.shape.preferenceLimit,
       },
     },
-    async ({ query, cwd, limit, sessionLimit }) => {
+    async ({ query, cwd, limit, sessionLimit, preferenceKeys, preferenceLimit }) => {
       try {
         const input = buildContextInputSchema.parse({
           query,
           cwd,
           limit,
           sessionLimit,
+          preferenceKeys,
+          preferenceLimit,
         });
         const contextPack = await service.buildContextPack(input);
         return {
@@ -268,19 +421,24 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
 
   const transport = new StdioServerTransport();
 
-  process.on("SIGINT", () => {
-    void server.close().finally(() => {
-      service.close();
-      process.exit(0);
-    });
-  });
+  let shuttingDown = false;
 
-  process.on("SIGTERM", () => {
+  function gracefulShutdown(): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
     void server.close().finally(() => {
       service.close();
       process.exit(0);
     });
-  });
+  }
+
+  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", gracefulShutdown);
+
+  // StdioServerTransport does not listen for stdin 'end'. When the parent
+  // process closes the pipe (session ends), the server would stay alive
+  // forever. Treat stdin closure as a shutdown signal.
+  process.stdin.on("end", gracefulShutdown);
 
   await server.connect(transport);
 }

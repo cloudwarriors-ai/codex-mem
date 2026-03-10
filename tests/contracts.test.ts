@@ -7,8 +7,12 @@ import {
   dashboardSaveMemoryBodySchema,
   dashboardSearchParamsSchema,
   getObservationsInputSchema,
+  listPreferencesInputSchema,
   observationTypeSchema,
+  preferenceNoteV1Schema,
+  resolvePreferencesInputSchema,
   saveMemoryInputSchema,
+  savePreferenceInputSchema,
   searchInputSchema,
   timelineInputSchema,
 } from "../src/contracts.js";
@@ -89,10 +93,65 @@ describe("contracts", () => {
     const buildContext = buildContextInputSchema.parse({
       sessionLimit: 6,
       limit: 12,
+      preferenceKeys: ["pref:frontend.iteration_size"],
+      preferenceLimit: 3,
     });
     expect(buildContext.sessionLimit).toBe(6);
+    expect(buildContext.preferenceKeys?.[0]).toBe("pref:frontend.iteration_size");
 
     expect(() => timelineInputSchema.parse({ anchor: 0 })).toThrow();
     expect(() => contextInputSchema.parse({ type: "nope" })).toThrow();
+  });
+
+  it("validates pref-note.v1 contracts and preference endpoints", () => {
+    const savePreference = savePreferenceInputSchema.parse({
+      schema_version: "pref-note.v1",
+      key: "pref:frontend.iteration_size",
+      scope: "project",
+      trigger: "When implementing UI changes",
+      preferred: "Change one region per iteration",
+      avoid: "Multi-region rewrites",
+      example_good: "Refactor the menu card only",
+      example_bad: "Rewrite all pages in one pass",
+      confidence: 0.9,
+      source: "user",
+      supersedes: ["14"],
+    });
+    expect(savePreference.scope).toBe("project");
+    expect(savePreference.key).toBe("pref:frontend.iteration_size");
+
+    const note = preferenceNoteV1Schema.parse({
+      ...savePreference,
+      created_at: "2026-03-01T00:00:00.000Z",
+    });
+    expect(note.schema_version).toBe("pref-note.v1");
+
+    const list = listPreferencesInputSchema.parse({
+      key: "pref:frontend.iteration_size",
+      include_superseded: false,
+    });
+    expect(list.key).toBe("pref:frontend.iteration_size");
+
+    const resolve = resolvePreferencesInputSchema.parse({
+      keys: ["pref:frontend.iteration_size"],
+      limit: 5,
+    });
+    expect(resolve.keys?.length).toBe(1);
+
+    expect(() =>
+      savePreferenceInputSchema.parse({
+        schema_version: "pref-note.v1",
+        key: "frontend.iteration_size",
+        scope: "project",
+        trigger: "bad key",
+        preferred: "foo",
+        avoid: "bar",
+        example_good: "good",
+        example_bad: "bad",
+        confidence: 0.5,
+        source: "user",
+        supersedes: [],
+      }),
+    ).toThrow();
   });
 });

@@ -79,6 +79,7 @@ export class ObservationStore {
     text: string;
     title?: string | undefined;
     cwd?: string | undefined;
+    metadataJson?: string | undefined;
     createdAt: string;
     createdAtEpoch: number;
   }): number {
@@ -104,7 +105,7 @@ export class ObservationStore {
         'manual_note',
         ?,
         ?,
-        '{}',
+        ?,
         ?,
         ?
       )
@@ -115,6 +116,7 @@ export class ObservationStore {
         input.cwd ?? "",
         input.title ?? "",
         input.text,
+        input.metadataJson ?? "{}",
         input.createdAt,
         input.createdAtEpoch,
       ) as { id: number };
