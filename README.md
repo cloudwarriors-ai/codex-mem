@@ -27,6 +27,43 @@ npm run build
 npm link
 ```
 
+## Debian Docker Runtime
+
+Run codex-mem in a Debian container with troubleshooting tools preinstalled (`sqlite3`, `lsof`, `strace`, `procps`, `dnsutils`, `jq`, `netcat`, and more).
+
+### Build image
+
+```bash
+cd /Users/chadsimon/code/codex-mem
+docker compose -f docker-compose.debian.yml build codex-mem-shell
+```
+
+### Start worker + dashboard
+
+```bash
+docker compose -f docker-compose.debian.yml up -d codex-mem-worker codex-mem-dashboard
+```
+
+Dashboard URL: `http://127.0.0.1:37811`
+
+### Open a troubleshooting shell
+
+```bash
+docker compose -f docker-compose.debian.yml run --rm codex-mem-shell
+```
+
+### Follow logs
+
+```bash
+docker compose -f docker-compose.debian.yml logs -f codex-mem-worker codex-mem-dashboard
+```
+
+### Stop services
+
+```bash
+docker compose -f docker-compose.debian.yml down
+```
+
 ## Register MCP Server With Codex
 
 ```bash
@@ -37,6 +74,12 @@ Equivalent manual command:
 
 ```bash
 codex mcp add codex-mem -- node /path/to/codex-mem/dist/cli.js mcp-server
+```
+
+Equivalent Docker-backed command (Debian container):
+
+```bash
+codex mcp add codex-mem-docker -- /Users/chadsimon/code/codex-mem/docker/mcp-server.sh
 ```
 
 ## CLI

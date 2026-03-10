@@ -9,8 +9,11 @@ import {
   buildContextInputSchema,
   contextInputSchema,
   getObservationsInputSchema,
+  listPreferencesInputSchema,
   projectListParamsSchema,
+  resolvePreferencesInputSchema,
   saveMemoryInputSchema,
+  savePreferenceInputSchema,
   searchInputSchema,
   sessionListParamsSchema,
   statsParamsSchema,
@@ -35,11 +38,14 @@ Usage:
   codex-mem timeline <anchorId> [--before N] [--after N] [--cwd PATH] [--json]
   codex-mem get <id...> [--json]
   codex-mem save <text> [--title TITLE] [--cwd PATH] [--json]
+  codex-mem save-preference --key KEY --scope SCOPE --trigger TEXT --preferred TEXT --avoid TEXT --example-good TEXT --example-bad TEXT --confidence N --source SOURCE [--supersedes CSV] [--created-at ISO] [--title TITLE] [--cwd PATH] [--json]
+  codex-mem list-preferences [--cwd PATH] [--key KEY] [--scope SCOPE] [--limit N] [--include-superseded] [--json]
+  codex-mem resolve-preferences [--cwd PATH] [--keys CSV] [--limit N] [--json]
   codex-mem context [--query TEXT] [--limit N] [--cwd PATH]
   codex-mem stats [--cwd PATH] [--json]
   codex-mem projects [--limit N] [--json]
   codex-mem sessions [--cwd PATH] [--limit N] [--json]
-  codex-mem build-context [--query TEXT] [--cwd PATH] [--limit N] [--session-limit N] [--json]
+  codex-mem build-context [--query TEXT] [--cwd PATH] [--limit N] [--session-limit N] [--preference-keys CSV] [--preference-limit N] [--json]
   codex-mem worker [--interval-seconds N] [--run-once] [--json]
   codex-mem dashboard [--host HOST] [--port PORT]
   codex-mem mcp-server
@@ -178,6 +184,62 @@ export async function main(argv = process.argv): Promise<void> {
         return;
       }
 
+      case "save-preference": {
+        const input = savePreferenceInputSchema.parse({
+          schema_version: "pref-note.v1",
+          key: parseStringFlag(parsed.flags.key),
+          scope: parseStringFlag(parsed.flags.scope),
+          trigger: parseStringFlag(parsed.flags.trigger),
+          preferred: parseStringFlag(parsed.flags.preferred),
+          avoid: parseStringFlag(parsed.flags.avoid),
+          example_good: parseStringFlag(parsed.flags["example-good"]),
+          example_bad: parseStringFlag(parsed.flags["example-bad"]),
+          confidence: parseFloatFlag(parsed.flags.confidence),
+          source: parseStringFlag(parsed.flags.source),
+          supersedes: parseCsvFlag(parsed.flags.supersedes) ?? [],
+          created_at: parseStringFlag(parsed.flags["created-at"]),
+          cwd: parseStringFlag(parsed.flags.cwd),
+          title: parseStringFlag(parsed.flags.title),
+        });
+        const id = await service.savePreference(input);
+        print({ status: "saved", id }, parsed.flags.json);
+        return;
+      }
+
+      case "list-preferences": {
+        const input = listPreferencesInputSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd),
+          key: parseStringFlag(parsed.flags.key),
+          scope: parseStringFlag(parsed.flags.scope),
+          limit: parseIntFlag(parsed.flags.limit),
+          include_superseded: parseBooleanFlag(parsed.flags["include-superseded"]),
+        });
+        const preferences = await service.listPreferences({
+          cwd: input.cwd,
+          key: input.key,
+          scope: input.scope,
+          limit: input.limit,
+          includeSuperseded: input.include_superseded,
+        });
+        print({ preferences }, parsed.flags.json);
+        return;
+      }
+
+      case "resolve-preferences": {
+        const input = resolvePreferencesInputSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd),
+          keys: parseCsvFlag(parsed.flags.keys),
+          limit: parseIntFlag(parsed.flags.limit),
+        });
+        const resolved = await service.resolvePreferences({
+          cwd: input.cwd,
+          keys: input.keys,
+          limit: input.limit,
+        });
+        print({ resolved }, parsed.flags.json);
+        return;
+      }
+
       case "context": {
         const input = contextInputSchema.parse({
           query: parseStringFlag(parsed.flags.query),
@@ -224,6 +286,8 @@ export async function main(argv = process.argv): Promise<void> {
           cwd: parseStringFlag(parsed.flags.cwd),
           limit: parseIntFlag(parsed.flags.limit),
           sessionLimit: parseIntFlag(parsed.flags["session-limit"]),
+          preferenceKeys: parseCsvFlag(parsed.flags["preference-keys"]),
+          preferenceLimit: parseIntFlag(parsed.flags["preference-limit"]),
         });
         const contextPack = await service.buildContextPack(input);
 
@@ -280,9 +344,34 @@ function parseIntFlag(value: string | boolean | undefined): number | undefined {
   return parsed;
 }
 
+function parseFloatFlag(value: string | boolean | undefined): number | undefined {
+  if (typeof value !== "string") return undefined;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed;
+}
+
 function parseStringFlag(value: string | boolean | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
   return value;
+}
+
+function parseBooleanFlag(value: string | boolean | undefined): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true" || normalized === "1" || normalized === "yes") return true;
+  if (normalized === "false" || normalized === "0" || normalized === "no") return false;
+  return undefined;
+}
+
+function parseCsvFlag(value: string | boolean | undefined): string[] | undefined {
+  if (typeof value !== "string") return undefined;
+  const list = value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return list.length > 0 ? list : undefined;
 }
 
 function parsePositionalText(values: string[]): string | undefined {

@@ -1,6 +1,6 @@
-import type { ObservationType } from "./contracts.js";
+import type { ObservationType, PreferenceScope, PreferenceSource } from "./contracts.js";
 
-export type { ObservationType } from "./contracts.js";
+export type { ObservationType, PreferenceScope, PreferenceSource } from "./contracts.js";
 
 export interface ObservationRecord {
   id: number;
@@ -67,6 +67,51 @@ export interface BuildContextOptions {
   query?: string | undefined;
   limit?: number | undefined;
   sessionLimit?: number | undefined;
+  preferenceKeys?: string[] | undefined;
+  preferenceLimit?: number | undefined;
+}
+
+export interface PreferenceNote {
+  schema_version: "pref-note.v1";
+  key: string;
+  scope: PreferenceScope;
+  trigger: string;
+  preferred: string;
+  avoid: string;
+  example_good: string;
+  example_bad: string;
+  confidence: number;
+  source: PreferenceSource;
+  supersedes: string[];
+  created_at: string;
+}
+
+export interface PreferenceRecord extends PreferenceNote {
+  id: number;
+  cwd: string;
+  title: string;
+  observationCreatedAt: string;
+  observationCreatedAtEpoch: number;
+}
+
+export interface ListPreferencesOptions {
+  cwd?: string | undefined;
+  key?: string | undefined;
+  scope?: PreferenceScope | undefined;
+  limit?: number | undefined;
+  includeSuperseded?: boolean | undefined;
+}
+
+export interface ResolvePreferencesOptions {
+  cwd?: string | undefined;
+  keys?: string[] | undefined;
+  limit?: number | undefined;
+}
+
+export interface ResolvedPreference {
+  key: string;
+  selected: PreferenceRecord;
+  ignored: PreferenceRecord[];
 }
 
 export interface MemoryStats {
@@ -101,6 +146,7 @@ export interface ContextPack {
   highlights: ObservationRecord[];
   sessions: SessionSummary[];
   notes: ObservationRecord[];
+  resolvedPreferences: ResolvedPreference[];
   markdown: string;
 }
 

@@ -59,6 +59,7 @@ export class MemoryRepository {
     text: string;
     title?: string | undefined;
     cwd?: string | undefined;
+    metadataJson?: string | undefined;
     createdAt: string;
     createdAtEpoch: number;
   }): number {
