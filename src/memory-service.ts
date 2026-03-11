@@ -1,10 +1,28 @@
 import { MemoryRepository } from "./db.js";
 import { CodexImporter } from "./importer.js";
 import { preferenceNoteV1Schema } from "./contracts.js";
+import {
+  defaultScopePolicyForVisibility,
+  defaultSensitivityForIdentity,
+  defaultVisibilityForMemory,
+  defaultVisibilityForPreference,
+  inferProcessWorkspaceIdentity,
+  ScopeIsolationError,
+  type WorkspaceIdentity,
+  allowsResultForScope,
+  resolveWorkspaceIdentity,
+} from "./workspace-identity.js";
+import {
+  buildRetrievalSummary,
+  classifyManualNoteForPromotion,
+  evaluateBenchmarkCase,
+  rankObservations,
+} from "./memory-intelligence.js";
 import { buildFtsQuery, createTitle, nowIso, safeJsonParse } from "./utils.js";
 import type {
   BuildContextOptions,
   ContextPack,
+  DurableMemoryRecord,
   ListPreferencesOptions,
   MemoryPaths,
   MemoryStats,
@@ -22,6 +40,10 @@ import type {
   StatsOptions,
   SyncResult,
   TimelineOptions,
+  RetrievalBenchmarkCase,
+  RetrievalBenchmarkResult,
+  RetrievalSummary,
+  ScopeMode,
 } from "./types.js";
 
 const SCOPE_RANK: Record<PreferenceNote["scope"], number> = {
@@ -53,6 +75,12 @@ type SavePreferenceInput = Omit<PreferenceNote, "created_at"> & {
   title?: string | undefined;
 };
 
+interface ScopedSearchResult {
+  observations: ObservationRecord[];
+  retrievalSummary: RetrievalSummary;
+  workspace: WorkspaceIdentity | null;
+}
+
 export class MemoryService {
   private readonly repo: MemoryRepository;
   private readonly importer: CodexImporter;
@@ -75,18 +103,26 @@ export class MemoryService {
 
   async search(options: SearchOptions): Promise<ObservationRecord[]> {
     await this.ensureFreshSync(false);
-
-    const preparedQuery = options.query ? buildFtsQuery(options.query) : undefined;
-
-    return this.repo.search({
-      ...options,
-      query: preparedQuery,
-    });
+    const scoped = this.runScopedSearch(options);
+    return scoped.observations;
   }
 
   async timeline(anchorId: number, options: TimelineOptions): Promise<ObservationRecord[]> {
     await this.ensureFreshSync(false);
-    return this.repo.getTimeline(anchorId, options);
+    const scopeMode = options.scopeMode ?? "global";
+    const scopedCwd =
+      options.cwd ??
+      (scopeMode === "exact_workspace" ? this.repo.getByIds([anchorId])[0]?.cwd ?? undefined : undefined);
+    const workspace = this.resolveWorkspaceRequirement(scopedCwd, scopeMode);
+    const rows = this.repo.getTimeline(anchorId, {
+      ...options,
+      cwd: workspace?.cwd,
+      scopeMode,
+    });
+    return this.filterIsolationOnly(rows, {
+      scopeMode,
+      workspace,
+    });
   }
 
   async getByIds(ids: number[]): Promise<ObservationRecord[]> {
@@ -96,7 +132,12 @@ export class MemoryService {
 
   async stats(options?: StatsOptions): Promise<MemoryStats> {
     await this.ensureFreshSync(false);
-    return this.repo.getStats(options);
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
+    return this.repo.getStats({
+      ...options,
+      cwd: workspace?.cwd,
+      workspaceId: workspace?.workspaceId,
+    });
   }
 
   async projects(options?: ProjectListOptions): Promise<ProjectSummary[]> {
@@ -106,7 +147,12 @@ export class MemoryService {
 
   async sessions(options?: SessionListOptions): Promise<SessionSummary[]> {
     await this.ensureFreshSync(false);
-    return this.repo.listSessions(options);
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
+    return this.repo.listSessions({
+      ...options,
+      cwd: workspace?.cwd,
+      workspaceId: workspace?.workspaceId,
+    });
   }
 
   async saveMemory(input: SaveMemoryInput): Promise<number> {
@@ -114,15 +160,27 @@ export class MemoryService {
     if (!text) {
       throw new Error("Text cannot be empty");
     }
+    const identity = this.resolveWriteIdentity(input.cwd);
+    const visibility = defaultVisibilityForMemory();
 
     const timestamp = nowIso();
     const id = this.repo.saveManualNote({
       text,
       title: input.title ?? createTitle(text),
-      cwd: input.cwd,
+      cwd: identity.cwd,
+      workspaceRoot: identity.workspaceRoot,
+      workspaceId: identity.workspaceId,
+      visibility,
+      sensitivity: defaultSensitivityForIdentity(identity),
+      scopePolicy: defaultScopePolicyForVisibility(visibility),
       metadataJson: input.metadataJson,
       createdAt: timestamp,
       createdAtEpoch: new Date(timestamp).getTime(),
+    });
+
+    await this.promoteObservationIds([id], {
+      sourceKind: "manual_save",
+      forceActive: true,
     });
 
     return id;
@@ -167,13 +225,15 @@ export class MemoryService {
 
   async listPreferences(options?: ListPreferencesOptions): Promise<PreferenceRecord[]> {
     await this.ensureFreshSync(false);
-
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
     const limit = options?.limit ?? 100;
-    const rows = this.repo.search({
-      cwd: options?.cwd,
+    const scoped = this.runScopedSearch({
+      cwd: workspace?.cwd,
       type: "manual_note",
-      limit,
+      limit: Math.min(limit * 5, 500),
+      scopeMode: options?.scopeMode ?? "exact_workspace",
     });
+    const rows = scoped.observations;
 
     const all = rows
       .map((row) => toPreferenceRecord(row))
@@ -197,12 +257,14 @@ export class MemoryService {
   }
 
   async resolvePreferences(options?: ResolvePreferencesOptions): Promise<ResolvedPreference[]> {
+    const scopeMode = options?.scopeMode ?? "global";
     const outputLimit = options?.limit ?? 100;
     const fetchLimit = Math.max(100, outputLimit);
     const candidates = await this.listPreferences({
       cwd: options?.cwd,
       limit: fetchLimit,
       includeSuperseded: true,
+      scopeMode,
     });
 
     const supersededBy = buildSupersededMap(candidates);
@@ -242,11 +304,13 @@ export class MemoryService {
     query?: string | undefined;
     limit?: number | undefined;
     type?: ObservationType | undefined;
+    scopeMode?: ScopeMode | undefined;
   }): Promise<string> {
     const pack = await this.buildContextPack({
       cwd: input.cwd,
       query: input.query,
       limit: input.limit,
+      scopeMode: input.scopeMode,
     });
 
     if (input.type) {
@@ -262,43 +326,63 @@ export class MemoryService {
   }
 
   async buildContextPack(options?: BuildContextOptions): Promise<ContextPack> {
-    const cwd = options?.cwd;
+    const scopeMode = options?.scopeMode ?? "exact_workspace";
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, scopeMode);
+    const cwd = workspace?.cwd;
     const query = options?.query;
     const limit = options?.limit ?? 8;
     const sessionLimit = options?.sessionLimit ?? 5;
 
-    const highlights = await this.search({
+    const scopedSearch = this.runScopedSearch({
       cwd,
       query,
       limit,
+      scopeMode,
     });
+    const highlights = scopedSearch.observations;
 
     const notes = await this.search({
       cwd,
       type: "manual_note",
       limit: 5,
+      scopeMode,
     });
+
+    const durableMemories = highlights
+      .filter((row) => row.memoryClass && row.memoryStatus === "active")
+      .slice(0, 5);
+    const recentRelevantObservations = highlights
+      .filter((row) => !row.memoryClass)
+      .slice(0, 3);
 
     const resolvedPreferences = await this.resolvePreferences({
       cwd,
       keys: options?.preferenceKeys,
       limit: options?.preferenceLimit ?? 5,
+      scopeMode,
     });
 
     const sessions = await this.sessions({
       cwd,
       limit: sessionLimit,
+      scopeMode,
     });
+
+    const retrievalSummary = scopedSearch.retrievalSummary;
 
     const generatedAt = nowIso();
     const markdown = toMarkdown({
       generatedAt,
       cwd,
       query,
+      scopeMode,
       highlights,
+      durableMemories,
+      recentRelevantObservations,
       sessions,
       notes,
       resolvedPreferences,
+      retrievalSummary,
     });
 
     return {
@@ -306,11 +390,167 @@ export class MemoryService {
       cwd,
       query,
       highlights,
+      durableMemories,
+      recentRelevantObservations,
       sessions,
       notes,
       resolvedPreferences,
+      retrievalSummary,
       markdown,
     };
+  }
+
+  async runRetrievalBenchmark(cases: RetrievalBenchmarkCase[]): Promise<RetrievalBenchmarkResult[]> {
+    await this.ensureFreshSync(false);
+    const results: RetrievalBenchmarkResult[] = [];
+
+    for (const testCase of cases) {
+      const pack = await this.buildContextPack({
+        cwd: testCase.cwd,
+        query: testCase.query,
+        preferenceKeys: testCase.preferenceKeys,
+        limit: 8,
+        sessionLimit: 3,
+      });
+
+      results.push(
+        evaluateBenchmarkCase(testCase, {
+          highlights: pack.highlights,
+          durableMemories: pack.durableMemories,
+          resolvedPreferenceKeys: pack.resolvedPreferences.map((item) => item.key),
+          retrievalSummary: pack.retrievalSummary,
+        }),
+      );
+    }
+
+    return results;
+  }
+
+  private runScopedSearch(options: SearchOptions): ScopedSearchResult {
+    const scopeMode = options.scopeMode ?? "global";
+    const workspace = this.resolveWorkspaceRequirement(options.cwd, scopeMode);
+    const preparedQuery = options.query ? buildFtsQuery(options.query) : undefined;
+    const raw = this.repo.search({
+      ...options,
+      cwd: undefined,
+      query: preparedQuery,
+      limit: Math.min((options.limit ?? 20) * 10, 200),
+    });
+
+    return this.applyIsolationPolicy(raw, {
+      scopeMode,
+      workspace,
+      query: options.query,
+      limit: options.limit ?? 20,
+    });
+  }
+
+  private applyIsolationPolicy(
+    rows: ObservationRecord[],
+    options: {
+      scopeMode: ScopeMode;
+      workspace: WorkspaceIdentity | null;
+      query?: string | undefined;
+      limit: number;
+    },
+  ): ScopedSearchResult {
+    let crossWorkspaceSuppressedCount = 0;
+    let restrictedSuppressedCount = 0;
+
+    const allowed = rows.filter((row) => {
+      const decision = allowsResultForScope({
+        requestedScopeMode: options.scopeMode,
+        requestedWorkspaceId: options.workspace?.workspaceId,
+        rowWorkspaceId: row.workspaceId,
+        visibility: row.visibility,
+        sensitivity: row.sensitivity,
+      });
+      row.workspaceMatch = decision.workspaceMatch;
+      row.scopeDecision = decision.scopeDecision;
+      row.visibilityDecision = decision.visibilityDecision;
+      if (!decision.allowed) {
+        if (decision.scopeDecision === "restricted_memory_present") restrictedSuppressedCount += 1;
+        else crossWorkspaceSuppressedCount += 1;
+      }
+      return decision.allowed;
+    });
+
+    const ranked = rankObservations(allowed, {
+      cwd: options.workspace?.cwd,
+      query: options.query,
+    }).slice(0, options.limit);
+
+    const retrievalSummary = buildRetrievalSummary(
+      ranked,
+      { cwd: options.workspace?.cwd, query: options.query },
+      {
+        superseded: 0,
+        crossProject: crossWorkspaceSuppressedCount,
+        restricted: restrictedSuppressedCount,
+      },
+      {
+        scopeMode: options.scopeMode,
+        workspaceRoot: options.workspace?.workspaceRoot,
+        workspaceId: options.workspace?.workspaceId,
+        blockedReason:
+          ranked.length === 0
+            ? options.workspace
+              ? "no_in_scope_results"
+              : "scope_required"
+            : undefined,
+      },
+    );
+
+    return {
+      observations: ranked,
+      retrievalSummary,
+      workspace: options.workspace,
+    };
+  }
+
+  private filterIsolationOnly(
+    rows: ObservationRecord[],
+    options: {
+      scopeMode: ScopeMode;
+      workspace: WorkspaceIdentity | null;
+    },
+  ): ObservationRecord[] {
+    return rows.filter((row) => {
+      const decision = allowsResultForScope({
+        requestedScopeMode: options.scopeMode,
+        requestedWorkspaceId: options.workspace?.workspaceId,
+        rowWorkspaceId: row.workspaceId,
+        visibility: row.visibility,
+        sensitivity: row.sensitivity,
+      });
+      row.workspaceMatch = decision.workspaceMatch;
+      row.scopeDecision = decision.scopeDecision;
+      row.visibilityDecision = decision.visibilityDecision;
+      return decision.allowed;
+    });
+  }
+
+  private resolveWorkspaceRequirement(
+    cwd: string | undefined,
+    scopeMode: ScopeMode,
+  ): WorkspaceIdentity | null {
+    if (scopeMode === "global") {
+      return cwd ? resolveWorkspaceIdentity(cwd) : null;
+    }
+
+    const identity = cwd ? resolveWorkspaceIdentity(cwd) : inferProcessWorkspaceIdentity();
+    if (!identity.resolved) {
+      throw new ScopeIsolationError(cwd ? "workspace_unresolved" : "scope_required", cwd ? "workspace_unresolved" : "scope_required");
+    }
+    return identity;
+  }
+
+  private resolveWriteIdentity(cwd?: string | undefined): WorkspaceIdentity {
+    const identity = cwd ? resolveWorkspaceIdentity(cwd) : inferProcessWorkspaceIdentity();
+    if (!identity.resolved) {
+      throw new ScopeIsolationError("workspace_unresolved", "workspace_unresolved");
+    }
+    return identity;
   }
 
   private assertNoSecretLikeData(preference: PreferenceNote): void {
@@ -346,10 +586,149 @@ export class MemoryService {
 
     try {
       const result = await this.inFlightSync;
+      await this.backfillIsolationMetadata();
+      await this.backfillDurableMemoryCandidates();
       this.lastSyncAtEpoch = Date.now();
       return result;
     } finally {
       this.inFlightSync = null;
+    }
+  }
+
+  private async backfillDurableMemoryCandidates(): Promise<void> {
+    const missing = this.repo.loadObservationsMissingDurableMemory();
+    if (missing.length === 0) return;
+
+    const now = nowIso();
+    const payloads = missing
+      .map((row) => {
+        const candidate = classifyManualNoteForPromotion(row, {
+          sourceKind: "manual_backfill",
+          forceActive: false,
+        });
+        if (!candidate) return null;
+
+        return {
+          observationId: row.id,
+          memoryClass: candidate.memoryClass,
+          title: row.title || createTitle(row.text),
+          body: row.text,
+          cwd: row.cwd,
+          workspaceRoot: row.workspaceRoot ?? "",
+          workspaceId: row.workspaceId ?? "unknown",
+          visibility:
+            candidate.memoryClass === "preference_note"
+              ? defaultVisibilityForPreference(getPreferenceScope(row) ?? candidate.scope)
+              : row.visibility ?? defaultVisibilityForMemory(),
+          sensitivity: row.sensitivity ?? "restricted",
+          scopePolicy:
+            candidate.memoryClass === "preference_note"
+              ? defaultScopePolicyForVisibility(
+                  defaultVisibilityForPreference(getPreferenceScope(row) ?? candidate.scope),
+                )
+              : row.scopePolicy ?? "exact_workspace",
+          trustLevel: candidate.trustLevel,
+          scope: candidate.scope,
+          sourceKind: candidate.sourceKind,
+          relatedTopics: candidate.relatedTopics,
+          status: candidate.status,
+          createdAt: row.createdAt,
+          updatedAt: now,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    this.repo.upsertDurableMemories(payloads);
+  }
+
+  private async promoteObservationIds(
+    ids: number[],
+    options: { sourceKind: DurableMemoryRecord["sourceKind"]; forceActive: boolean },
+  ): Promise<void> {
+    if (ids.length === 0) return;
+    const rows = await this.getByIds(ids);
+    const now = nowIso();
+    const payloads = rows
+      .map((row) => {
+        const candidate = classifyManualNoteForPromotion(row, {
+          sourceKind: options.sourceKind,
+          forceActive: options.forceActive,
+        });
+        if (!candidate) return null;
+
+        return {
+          observationId: row.id,
+          memoryClass: candidate.memoryClass,
+          title: row.title || createTitle(row.text),
+          body: row.text,
+          cwd: row.cwd,
+          workspaceRoot: row.workspaceRoot ?? "",
+          workspaceId: row.workspaceId ?? "unknown",
+          visibility:
+            candidate.memoryClass === "preference_note"
+              ? defaultVisibilityForPreference(getPreferenceScope(row) ?? candidate.scope)
+              : row.visibility ?? defaultVisibilityForMemory(),
+          sensitivity: row.sensitivity ?? "restricted",
+          scopePolicy:
+            candidate.memoryClass === "preference_note"
+              ? defaultScopePolicyForVisibility(
+                  defaultVisibilityForPreference(getPreferenceScope(row) ?? candidate.scope),
+                )
+              : row.scopePolicy ?? "exact_workspace",
+          trustLevel: candidate.trustLevel,
+          scope: candidate.scope,
+          sourceKind: candidate.sourceKind,
+          relatedTopics: candidate.relatedTopics,
+          status: candidate.status,
+          createdAt: row.createdAt,
+          updatedAt: now,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row !== null);
+
+    this.repo.upsertDurableMemories(payloads);
+  }
+
+  private async backfillIsolationMetadata(): Promise<void> {
+    const observationRows = this.repo.loadObservationsMissingIsolation();
+    if (observationRows.length > 0) {
+      this.repo.updateObservationIsolation(
+        observationRows.map((row) => {
+          const identity = row.cwd ? resolveWorkspaceIdentity(row.cwd) : { cwd: "", workspaceRoot: "", workspaceId: "unknown", resolved: false };
+          const visibility = row.type === "manual_note" && getPreferenceScope(row) === "global"
+            ? defaultVisibilityForPreference("global")
+            : defaultVisibilityForMemory();
+          return {
+            id: row.id,
+            workspaceRoot: identity.workspaceRoot,
+            workspaceId: identity.workspaceId,
+            visibility,
+            sensitivity: defaultSensitivityForIdentity(identity),
+            scopePolicy: defaultScopePolicyForVisibility(visibility),
+          };
+        }),
+      );
+    }
+
+    const durableRows = this.repo.loadDurableMemoriesMissingIsolation();
+    if (durableRows.length > 0) {
+      this.repo.updateDurableMemoryIsolation(
+        durableRows.map((row) => {
+          const identity = row.cwd ? resolveWorkspaceIdentity(row.cwd) : { cwd: "", workspaceRoot: "", workspaceId: "unknown", resolved: false };
+          const visibility =
+            row.memoryClass === "preference_note" && row.scope === "global"
+              ? defaultVisibilityForPreference("global")
+              : defaultVisibilityForMemory();
+          return {
+            id: row.id,
+            workspaceRoot: identity.workspaceRoot,
+            workspaceId: identity.workspaceId,
+            visibility,
+            sensitivity: defaultSensitivityForIdentity(identity),
+            scopePolicy: defaultScopePolicyForVisibility(visibility),
+          };
+        }),
+      );
     }
   }
 }
@@ -431,6 +810,13 @@ function toPreferenceRecord(row: ObservationRecord): PreferenceRecord | null {
   };
 }
 
+function getPreferenceScope(row: ObservationRecord): PreferenceNote["scope"] | null {
+  const metadata = safeJsonParse<unknown>(row.metadataJson);
+  if (!metadata) return null;
+  const parsed = preferenceNoteV1Schema.safeParse(metadata);
+  return parsed.success ? parsed.data.scope : null;
+}
+
 function shrink(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, maxLen)}...`;
@@ -440,6 +826,7 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
   const lines: string[] = ["# codex-mem context", ""];
 
   if (pack.cwd) lines.push(`- scope.cwd: ${pack.cwd}`);
+  if (pack.scopeMode) lines.push(`- scope.mode: ${pack.scopeMode}`);
   if (pack.query) lines.push(`- scope.query: ${pack.query}`);
   lines.push(`- generated_at: ${pack.generatedAt}`);
   lines.push("");
@@ -452,6 +839,18 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
       lines.push(`- [${row.id}] (${row.type}) ${shrink(row.text, 220)}`);
       lines.push(`  - time: ${row.createdAt}`);
       if (row.cwd) lines.push(`  - cwd: ${row.cwd}`);
+      if (row.selectionReason) lines.push(`  - why: ${row.selectionReason}`);
+      if (row.trustBasis) lines.push(`  - trust: ${row.trustBasis}`);
+    }
+  }
+
+  if (pack.durableMemories.length > 0) {
+    lines.push("");
+    lines.push("## Durable Memories");
+    for (const row of pack.durableMemories) {
+      lines.push(`- [${row.id}] ${row.memoryClass}: ${shrink(row.text, 180)}`);
+      if (row.selectionReason) lines.push(`  - why: ${row.selectionReason}`);
+      if (row.trustBasis) lines.push(`  - trust: ${row.trustBasis}`);
     }
   }
 
@@ -479,6 +878,14 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
     }
   }
 
+  if (pack.recentRelevantObservations.length > 0) {
+    lines.push("");
+    lines.push("## Recent Relevant Observations");
+    for (const row of pack.recentRelevantObservations) {
+      lines.push(`- [${row.id}] ${shrink(row.text, 180)}`);
+    }
+  }
+
   if (pack.sessions.length > 0) {
     lines.push("");
     lines.push("## Recent Sessions");
@@ -487,6 +894,22 @@ function toMarkdown(pack: Omit<ContextPack, "markdown">): string {
       if (session.cwd) lines.push(`  - cwd: ${session.cwd}`);
       if (session.lastTitle) lines.push(`  - last: ${shrink(session.lastTitle, 140)}`);
     }
+  }
+
+  lines.push("");
+  lines.push("## Retrieval Summary");
+  lines.push(`- confidence: ${pack.retrievalSummary.confidenceBand}`);
+  lines.push(`- reason: ${pack.retrievalSummary.confidenceReason}`);
+  lines.push(`- scope_mode: ${pack.retrievalSummary.scopeModeApplied}`);
+  lines.push(`- durable: ${pack.retrievalSummary.durableCount}`);
+  lines.push(`- episodic: ${pack.retrievalSummary.episodicCount}`);
+  lines.push(`- suppressed_cross_workspace: ${pack.retrievalSummary.suppressedAsCrossProject}`);
+  lines.push(`- suppressed_restricted: ${pack.retrievalSummary.suppressedAsRestricted}`);
+  if (pack.retrievalSummary.blockedReason) {
+    lines.push(`- blocked_reason: ${pack.retrievalSummary.blockedReason}`);
+  }
+  if (pack.retrievalSummary.weakSpots.length > 0) {
+    lines.push(`- weak_spots: ${pack.retrievalSummary.weakSpots.join("; ")}`);
   }
 
   return lines.join("\n");

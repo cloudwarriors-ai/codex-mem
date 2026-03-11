@@ -35,17 +35,17 @@ const HELP_TEXT = `codex-mem
 Usage:
   codex-mem sync [--json]
   codex-mem search <query> [--limit N] [--offset N] [--cwd PATH] [--type TYPE] [--json]
-  codex-mem timeline <anchorId> [--before N] [--after N] [--cwd PATH] [--json]
+  codex-mem timeline <anchorId> [--before N] [--after N] [--cwd PATH] [--scope-mode MODE] [--json]
   codex-mem get <id...> [--json]
   codex-mem save <text> [--title TITLE] [--cwd PATH] [--json]
   codex-mem save-preference --key KEY --scope SCOPE --trigger TEXT --preferred TEXT --avoid TEXT --example-good TEXT --example-bad TEXT --confidence N --source SOURCE [--supersedes CSV] [--created-at ISO] [--title TITLE] [--cwd PATH] [--json]
   codex-mem list-preferences [--cwd PATH] [--key KEY] [--scope SCOPE] [--limit N] [--include-superseded] [--json]
   codex-mem resolve-preferences [--cwd PATH] [--keys CSV] [--limit N] [--json]
-  codex-mem context [--query TEXT] [--limit N] [--cwd PATH]
-  codex-mem stats [--cwd PATH] [--json]
+  codex-mem context [--query TEXT] [--limit N] [--cwd PATH] [--scope-mode MODE]
+  codex-mem stats [--cwd PATH] [--scope-mode MODE] [--json]
   codex-mem projects [--limit N] [--json]
-  codex-mem sessions [--cwd PATH] [--limit N] [--json]
-  codex-mem build-context [--query TEXT] [--cwd PATH] [--limit N] [--session-limit N] [--preference-keys CSV] [--preference-limit N] [--json]
+  codex-mem sessions [--cwd PATH] [--limit N] [--scope-mode MODE] [--json]
+  codex-mem build-context [--query TEXT] [--cwd PATH] [--limit N] [--session-limit N] [--preference-keys CSV] [--preference-limit N] [--scope-mode MODE] [--json]
   codex-mem worker [--interval-seconds N] [--run-once] [--json]
   codex-mem dashboard [--host HOST] [--port PORT]
   codex-mem mcp-server
@@ -142,8 +142,9 @@ export async function main(argv = process.argv): Promise<void> {
           query: parsePositionalText(parsed.positionals),
           limit: parseIntFlag(parsed.flags.limit),
           offset: parseIntFlag(parsed.flags.offset),
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           type: parseStringFlag(parsed.flags.type),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const observations = await service.search(input);
         print({ observations }, parsed.flags.json);
@@ -155,7 +156,8 @@ export async function main(argv = process.argv): Promise<void> {
           anchor: parseIntFlag(parsed.positionals[0]),
           before: parseIntFlag(parsed.flags.before),
           after: parseIntFlag(parsed.flags.after),
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const observations = await service.timeline(input.anchor, input);
 
@@ -176,7 +178,7 @@ export async function main(argv = process.argv): Promise<void> {
         const input = saveMemoryInputSchema.parse({
           text: parsePositionalText(parsed.positionals),
           title: parseStringFlag(parsed.flags.title),
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
         });
         const id = await service.saveMemory(input);
 
@@ -208,11 +210,12 @@ export async function main(argv = process.argv): Promise<void> {
 
       case "list-preferences": {
         const input = listPreferencesInputSchema.parse({
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           key: parseStringFlag(parsed.flags.key),
           scope: parseStringFlag(parsed.flags.scope),
           limit: parseIntFlag(parsed.flags.limit),
           include_superseded: parseBooleanFlag(parsed.flags["include-superseded"]),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const preferences = await service.listPreferences({
           cwd: input.cwd,
@@ -220,6 +223,7 @@ export async function main(argv = process.argv): Promise<void> {
           scope: input.scope,
           limit: input.limit,
           includeSuperseded: input.include_superseded,
+          scopeMode: input.scopeMode,
         });
         print({ preferences }, parsed.flags.json);
         return;
@@ -227,14 +231,16 @@ export async function main(argv = process.argv): Promise<void> {
 
       case "resolve-preferences": {
         const input = resolvePreferencesInputSchema.parse({
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           keys: parseCsvFlag(parsed.flags.keys),
           limit: parseIntFlag(parsed.flags.limit),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const resolved = await service.resolvePreferences({
           cwd: input.cwd,
           keys: input.keys,
           limit: input.limit,
+          scopeMode: input.scopeMode,
         });
         print({ resolved }, parsed.flags.json);
         return;
@@ -244,8 +250,9 @@ export async function main(argv = process.argv): Promise<void> {
         const input = contextInputSchema.parse({
           query: parseStringFlag(parsed.flags.query),
           limit: parseIntFlag(parsed.flags.limit),
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           type: parseStringFlag(parsed.flags.type),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const context = await service.context(input);
         process.stdout.write(`${context}\n`);
@@ -254,7 +261,8 @@ export async function main(argv = process.argv): Promise<void> {
 
       case "stats": {
         const input = statsParamsSchema.parse({
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
         });
         const stats = await service.stats(input);
         print({ stats }, parsed.flags.json);
@@ -272,8 +280,9 @@ export async function main(argv = process.argv): Promise<void> {
 
       case "sessions": {
         const input = sessionListParamsSchema.parse({
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           limit: parseIntFlag(parsed.flags.limit),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]),
         });
         const sessions = await service.sessions(input);
         print({ sessions }, parsed.flags.json);
@@ -283,11 +292,12 @@ export async function main(argv = process.argv): Promise<void> {
       case "build-context": {
         const input = buildContextInputSchema.parse({
           query: parseStringFlag(parsed.flags.query),
-          cwd: parseStringFlag(parsed.flags.cwd),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
           limit: parseIntFlag(parsed.flags.limit),
           sessionLimit: parseIntFlag(parsed.flags["session-limit"]),
           preferenceKeys: parseCsvFlag(parsed.flags["preference-keys"]),
           preferenceLimit: parseIntFlag(parsed.flags["preference-limit"]),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]),
         });
         const contextPack = await service.buildContextPack(input);
 

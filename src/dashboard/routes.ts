@@ -27,6 +27,7 @@ import {
 } from "./parsers.js";
 import { renderDashboardHtml } from "./template.js";
 import { MemoryService } from "../memory-service.js";
+import { inferProcessWorkspaceIdentity, ScopeIsolationError } from "../workspace-identity.js";
 
 const VERSION = "0.1.0";
 const DASHBOARD_CLIENT_ENTRY =
@@ -144,23 +145,39 @@ async function handleHealth(
 
 async function handleSearch(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseSearchParams(url);
-  const observations = await service.search(params);
-  writeJson(res, 200, { observations });
+  const cwd = params.cwd ?? inferProcessWorkspaceIdentity().cwd;
+  const observations = await service.search({
+    ...params,
+    cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
+  const contextPack = await service.buildContextPack({
+    cwd,
+    query: params.query,
+    limit: params.limit,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
+  writeJson(res, 200, { observations, retrievalSummary: contextPack.retrievalSummary });
 }
 
 async function handleTimeline(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseTimelineParams(url);
   const observations = await service.timeline(params.anchor, {
     before: params.before,
-    after: params.after,
-    cwd: params.cwd,
+      after: params.after,
+      cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+      scopeMode: params.scopeMode ?? "exact_workspace",
   });
   writeJson(res, 200, { observations });
 }
 
 async function handleContext(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseContextParams(url);
-  const context = await service.context(params);
+  const context = await service.context({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { context });
 }
 
@@ -170,13 +187,21 @@ async function handleContextPack(
   url: URL,
 ): Promise<void> {
   const params = parseBuildContextParams(url);
-  const contextPack = await service.buildContextPack(params);
+  const contextPack = await service.buildContextPack({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { contextPack });
 }
 
 async function handleStats(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseStatsParams(url);
-  const stats = await service.stats(params);
+  const stats = await service.stats({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { stats });
 }
 
@@ -188,7 +213,11 @@ async function handleProjects(res: ServerResponse, service: MemoryService, url: 
 
 async function handleSessions(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseSessionListParams(url);
-  const sessions = await service.sessions(params);
+  const sessions = await service.sessions({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { sessions });
 }
 
@@ -218,7 +247,10 @@ async function handleSaveMemory(
   const json = await readJsonBody(req);
   const body = requireJsonObject(json);
   const input = parseSaveMemoryBody(body);
-  const id = await service.saveMemory(input);
+  const id = await service.saveMemory({
+    ...input,
+    cwd: input.cwd ?? inferProcessWorkspaceIdentity().cwd,
+  });
 
   writeJson(res, 200, {
     status: "saved",
@@ -301,6 +333,14 @@ export function normalizeDashboardError(error: unknown): {
       status: 400,
       code: "INVALID_INPUT",
       message: normalized.message,
+    };
+  }
+
+  if (error instanceof ScopeIsolationError) {
+    return {
+      status: 400,
+      code: error.reason.toUpperCase(),
+      message: error.message,
     };
   }
 

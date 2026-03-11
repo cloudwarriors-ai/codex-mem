@@ -18,6 +18,7 @@ export const searchInputSchema = z.object({
   type: observationTypeSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
   offset: z.number().int().min(0).max(100_000).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type SearchInput = z.infer<typeof searchInputSchema>;
@@ -27,6 +28,7 @@ export const timelineInputSchema = z.object({
   before: z.number().int().min(1).max(200).optional(),
   after: z.number().int().min(1).max(200).optional(),
   cwd: z.string().min(1).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type TimelineInput = z.infer<typeof timelineInputSchema>;
@@ -96,6 +98,7 @@ export const listPreferencesInputSchema = z.object({
   scope: preferenceScopeSchema.optional(),
   limit: z.number().int().min(1).max(200).optional(),
   include_superseded: z.boolean().optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type ListPreferencesInput = z.infer<typeof listPreferencesInputSchema>;
@@ -104,6 +107,7 @@ export const resolvePreferencesInputSchema = z.object({
   cwd: z.string().trim().min(1).optional(),
   keys: z.array(preferenceKeySchema).min(1).max(200).optional(),
   limit: z.number().int().min(1).max(200).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type ResolvePreferencesInput = z.infer<typeof resolvePreferencesInputSchema>;
@@ -113,6 +117,7 @@ export const contextInputSchema = z.object({
   cwd: z.string().min(1).optional(),
   type: observationTypeSchema.optional(),
   limit: z.number().int().min(1).max(100).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type ContextInput = z.infer<typeof contextInputSchema>;
@@ -143,6 +148,7 @@ export type DashboardBatchBody = z.infer<typeof dashboardBatchBodySchema>;
 
 export const statsParamsSchema = z.object({
   cwd: z.string().min(1).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type StatsParams = z.infer<typeof statsParamsSchema>;
@@ -156,6 +162,7 @@ export type ProjectListParams = z.infer<typeof projectListParamsSchema>;
 export const sessionListParamsSchema = z.object({
   cwd: z.string().min(1).optional(),
   limit: z.number().int().min(1).max(200).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type SessionListParams = z.infer<typeof sessionListParamsSchema>;
@@ -167,6 +174,7 @@ export const buildContextInputSchema = z.object({
   sessionLimit: z.number().int().min(1).max(50).optional(),
   preferenceKeys: z.array(preferenceKeySchema).min(1).max(100).optional(),
   preferenceLimit: z.number().int().min(1).max(100).optional(),
+  scopeMode: z.enum(["exact_workspace", "cross_workspace", "global"]).optional(),
 });
 
 export type BuildContextInput = z.infer<typeof buildContextInputSchema>;

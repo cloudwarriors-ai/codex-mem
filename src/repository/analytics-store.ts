@@ -16,6 +16,7 @@ export class AnalyticsStore {
 
   getStats(options?: StatsOptions): MemoryStats {
     const cwd = options?.cwd ?? "";
+    const workspaceId = options?.workspaceId ?? "";
     const row = this.db
       .prepare(
         `
@@ -28,10 +29,11 @@ export class AnalyticsStore {
           COUNT(DISTINCT CASE WHEN cwd <> '' THEN cwd END) AS unique_projects,
           COUNT(DISTINCT CASE WHEN session_id <> '' THEN session_id END) AS unique_sessions
         FROM observations
-        WHERE (? = '' OR cwd = ?)
+        WHERE (? = '' OR workspace_id = ?)
+          AND (? = '' OR cwd = ?)
       `,
       )
-      .get(cwd, cwd) as StatsRow | undefined;
+      .get(workspaceId, workspaceId, cwd, cwd) as StatsRow | undefined;
 
     return mapStatsRow(row);
   }
@@ -59,6 +61,7 @@ export class AnalyticsStore {
 
   listSessions(options?: SessionListOptions): SessionSummary[] {
     const cwd = options?.cwd ?? "";
+    const workspaceId = options?.workspaceId ?? "";
     const limit = clampInt(options?.limit, 1, 200, 20);
 
     const rows = this.db
@@ -73,6 +76,20 @@ export class AnalyticsStore {
             ORDER BY o2.created_at_epoch DESC, o2.id DESC
             LIMIT 1
           ) AS cwd,
+          (
+            SELECT o2.workspace_root
+            FROM observations o2
+            WHERE o2.session_id = o.session_id
+            ORDER BY o2.created_at_epoch DESC, o2.id DESC
+            LIMIT 1
+          ) AS workspace_root,
+          (
+            SELECT o2.workspace_id
+            FROM observations o2
+            WHERE o2.session_id = o.session_id
+            ORDER BY o2.created_at_epoch DESC, o2.id DESC
+            LIMIT 1
+          ) AS workspace_id,
           MIN(o.created_at_epoch) AS first_epoch,
           MAX(o.created_at_epoch) AS last_epoch,
           COUNT(*) AS observation_count,
@@ -85,13 +102,14 @@ export class AnalyticsStore {
           ) AS last_title
         FROM observations o
         WHERE o.session_id <> ''
+          AND (? = '' OR o.workspace_id = ?)
           AND (? = '' OR o.cwd = ?)
         GROUP BY o.session_id
         ORDER BY last_epoch DESC
         LIMIT ?
       `,
       )
-      .all(cwd, cwd, limit) as SessionRow[];
+      .all(workspaceId, workspaceId, cwd, cwd, limit) as SessionRow[];
 
     return mapSessionRows(rows);
   }

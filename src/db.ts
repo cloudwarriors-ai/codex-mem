@@ -1,9 +1,11 @@
 import Database from "better-sqlite3";
 import { AnalyticsStore } from "./repository/analytics-store.js";
+import { DurableMemoryStore } from "./repository/durable-memory-store.js";
 import { ObservationStore } from "./repository/observation-store.js";
 import { SourceOffsetStore } from "./repository/offset-store.js";
 import { initializeRepositorySchema } from "./repository/schema.js";
 import type {
+  DurableMemoryRecord,
   MemoryStats,
   ObservationInsert,
   ObservationRecord,
@@ -22,6 +24,7 @@ export class MemoryRepository {
   private readonly offsets: SourceOffsetStore;
   private readonly observations: ObservationStore;
   private readonly analytics: AnalyticsStore;
+  private readonly durableMemories: DurableMemoryStore;
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
@@ -33,6 +36,7 @@ export class MemoryRepository {
     this.offsets = new SourceOffsetStore(this.db);
     this.observations = new ObservationStore(this.db);
     this.analytics = new AnalyticsStore(this.db);
+    this.durableMemories = new DurableMemoryStore(this.db);
   }
 
   close(): void {
@@ -59,6 +63,11 @@ export class MemoryRepository {
     text: string;
     title?: string | undefined;
     cwd?: string | undefined;
+    workspaceRoot?: string | undefined;
+    workspaceId?: string | undefined;
+    visibility?: ObservationRecord["visibility"];
+    sensitivity?: ObservationRecord["sensitivity"];
+    scopePolicy?: ObservationRecord["scopePolicy"];
     metadataJson?: string | undefined;
     createdAt: string;
     createdAtEpoch: number;
@@ -68,6 +77,81 @@ export class MemoryRepository {
 
   search(options: SearchOptions): ObservationRecord[] {
     return this.observations.search(options);
+  }
+
+  loadObservationsMissingDurableMemory(): ObservationRecord[] {
+    return this.observations.mapRows(this.durableMemories.loadBackfillObservations());
+  }
+
+  loadObservationsMissingIsolation(): ObservationRecord[] {
+    return this.observations.mapRows(this.observations.loadMissingIsolationRows());
+  }
+
+  updateObservationIsolation(
+    inputs: Array<{
+      id: number;
+      workspaceRoot: string;
+      workspaceId: string;
+      visibility: ObservationRecord["visibility"];
+      sensitivity: ObservationRecord["sensitivity"];
+      scopePolicy: ObservationRecord["scopePolicy"];
+    }>,
+  ): number {
+    return this.observations.updateIsolation(inputs);
+  }
+
+  upsertDurableMemories(
+    inputs: Array<{
+      observationId: number;
+      memoryClass: DurableMemoryRecord["memoryClass"];
+      title: string;
+      body: string;
+      cwd?: string | undefined;
+      workspaceRoot: string;
+      workspaceId: string;
+      visibility: DurableMemoryRecord["visibility"];
+      sensitivity: DurableMemoryRecord["sensitivity"];
+      scopePolicy: DurableMemoryRecord["scopePolicy"];
+      trustLevel: number;
+      scope: DurableMemoryRecord["scope"];
+      sourceKind: DurableMemoryRecord["sourceKind"];
+      supersedes?: string[] | undefined;
+      relatedPaths?: string[] | undefined;
+      relatedTopics?: string[] | undefined;
+      status: DurableMemoryRecord["status"];
+      createdAt: string;
+      updatedAt: string;
+    }>,
+  ): number {
+    return this.durableMemories.backfillFromObservations(inputs);
+  }
+
+  getDurableMemoriesForObservationIds(
+    ids: number[],
+    statuses: DurableMemoryRecord["status"][] = ["active"],
+  ): DurableMemoryRecord[] {
+    return this.durableMemories.listForObservationIds(ids, statuses);
+  }
+
+  listDurableMemoryCandidates(limit?: number): DurableMemoryRecord[] {
+    return this.durableMemories.listCandidates(limit);
+  }
+
+  loadDurableMemoriesMissingIsolation(): DurableMemoryRecord[] {
+    return this.durableMemories.loadMissingIsolationRows();
+  }
+
+  updateDurableMemoryIsolation(
+    inputs: Array<{
+      id: number;
+      workspaceRoot: string;
+      workspaceId: string;
+      visibility: DurableMemoryRecord["visibility"];
+      sensitivity: DurableMemoryRecord["sensitivity"];
+      scopePolicy: DurableMemoryRecord["scopePolicy"];
+    }>,
+  ): number {
+    return this.durableMemories.updateIsolation(inputs);
   }
 
   getByIds(ids: number[]): ObservationRecord[] {

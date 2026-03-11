@@ -35,9 +35,10 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         offset: searchInputSchema.shape.offset,
         cwd: searchInputSchema.shape.cwd,
         type: searchInputSchema.shape.type,
+        scopeMode: searchInputSchema.shape.scopeMode,
       },
     },
-    async ({ query, limit, offset, cwd, type }) => {
+    async ({ query, limit, offset, cwd, type, scopeMode }) => {
       try {
         const input = searchInputSchema.parse({
           query,
@@ -45,6 +46,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           offset,
           cwd,
           type,
+          scopeMode: scopeMode ?? "exact_workspace",
         });
         const observations = await service.search(input);
 
@@ -80,11 +82,18 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         before: timelineInputSchema.shape.before,
         after: timelineInputSchema.shape.after,
         cwd: timelineInputSchema.shape.cwd,
+        scopeMode: timelineInputSchema.shape.scopeMode,
       },
     },
-    async ({ anchor, before, after, cwd }) => {
+    async ({ anchor, before, after, cwd, scopeMode }) => {
       try {
-        const input = timelineInputSchema.parse({ anchor, before, after, cwd });
+        const input = timelineInputSchema.parse({
+          anchor,
+          before,
+          after,
+          cwd,
+          scopeMode: scopeMode ?? "exact_workspace",
+        });
         const observations = await service.timeline(input.anchor, input);
         return {
           content: [
@@ -236,9 +245,10 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         scope: listPreferencesInputSchema.shape.scope,
         limit: listPreferencesInputSchema.shape.limit,
         include_superseded: listPreferencesInputSchema.shape.include_superseded,
+        scopeMode: listPreferencesInputSchema.shape.scopeMode,
       },
     },
-    async ({ cwd, key, scope, limit, include_superseded }) => {
+    async ({ cwd, key, scope, limit, include_superseded, scopeMode }) => {
       try {
         const input = listPreferencesInputSchema.parse({
           cwd,
@@ -246,6 +256,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           scope,
           limit,
           include_superseded,
+          scopeMode: scopeMode ?? "exact_workspace",
         });
         const preferences = await service.listPreferences({
           cwd: input.cwd,
@@ -253,6 +264,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           scope: input.scope,
           limit: input.limit,
           includeSuperseded: input.include_superseded,
+          scopeMode: input.scopeMode,
         });
         return {
           content: [
@@ -277,15 +289,22 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         cwd: resolvePreferencesInputSchema.shape.cwd,
         keys: resolvePreferencesInputSchema.shape.keys,
         limit: resolvePreferencesInputSchema.shape.limit,
+        scopeMode: resolvePreferencesInputSchema.shape.scopeMode,
       },
     },
-    async ({ cwd, keys, limit }) => {
+    async ({ cwd, keys, limit, scopeMode }) => {
       try {
-        const input = resolvePreferencesInputSchema.parse({ cwd, keys, limit });
+        const input = resolvePreferencesInputSchema.parse({
+          cwd,
+          keys,
+          limit,
+          scopeMode: scopeMode ?? "exact_workspace",
+        });
         const resolved = await service.resolvePreferences({
           cwd: input.cwd,
           keys: input.keys,
           limit: input.limit,
+          scopeMode: input.scopeMode,
         });
         return {
           content: [
@@ -307,11 +326,12 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
       description: "Get memory counts and coverage stats. Params: cwd",
       inputSchema: {
         cwd: statsParamsSchema.shape.cwd,
+        scopeMode: statsParamsSchema.shape.scopeMode,
       },
     },
-    async ({ cwd }) => {
+    async ({ cwd, scopeMode }) => {
       try {
-        const input = statsParamsSchema.parse({ cwd });
+        const input = statsParamsSchema.parse({ cwd, scopeMode: scopeMode ?? "exact_workspace" });
         const stats = await service.stats(input);
         return {
           content: [
@@ -360,11 +380,16 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
       inputSchema: {
         cwd: sessionListParamsSchema.shape.cwd,
         limit: sessionListParamsSchema.shape.limit,
+        scopeMode: sessionListParamsSchema.shape.scopeMode,
       },
     },
-    async ({ cwd, limit }) => {
+    async ({ cwd, limit, scopeMode }) => {
       try {
-        const input = sessionListParamsSchema.parse({ cwd, limit });
+        const input = sessionListParamsSchema.parse({
+          cwd,
+          limit,
+          scopeMode: scopeMode ?? "exact_workspace",
+        });
         const sessions = await service.sessions(input);
         return {
           content: [
@@ -392,9 +417,10 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         sessionLimit: buildContextInputSchema.shape.sessionLimit,
         preferenceKeys: buildContextInputSchema.shape.preferenceKeys,
         preferenceLimit: buildContextInputSchema.shape.preferenceLimit,
+        scopeMode: buildContextInputSchema.shape.scopeMode,
       },
     },
-    async ({ query, cwd, limit, sessionLimit, preferenceKeys, preferenceLimit }) => {
+    async ({ query, cwd, limit, sessionLimit, preferenceKeys, preferenceLimit, scopeMode }) => {
       try {
         const input = buildContextInputSchema.parse({
           query,
@@ -403,6 +429,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           sessionLimit,
           preferenceKeys,
           preferenceLimit,
+          scopeMode: scopeMode ?? "exact_workspace",
         });
         const contextPack = await service.buildContextPack(input);
         return {
@@ -422,14 +449,30 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
   const transport = new StdioServerTransport();
 
   let shuttingDown = false;
+  let forcedExitTimer: NodeJS.Timeout | null = null;
 
   function gracefulShutdown(): void {
     if (shuttingDown) return;
     shuttingDown = true;
-    void server.close().finally(() => {
+    forcedExitTimer = setTimeout(() => {
       service.close();
       process.exit(0);
-    });
+    }, 250);
+    forcedExitTimer.unref?.();
+
+    void server
+      .close()
+      .catch(() => {
+        // Fall through to the forced-exit path below.
+      })
+      .finally(() => {
+        if (forcedExitTimer) {
+          clearTimeout(forcedExitTimer);
+          forcedExitTimer = null;
+        }
+        service.close();
+        process.exit(0);
+      });
   }
 
   process.on("SIGINT", gracefulShutdown);
@@ -439,6 +482,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
   // process closes the pipe (session ends), the server would stay alive
   // forever. Treat stdin closure as a shutdown signal.
   process.stdin.on("end", gracefulShutdown);
+  process.stdin.on("close", gracefulShutdown);
 
   await server.connect(transport);
 }

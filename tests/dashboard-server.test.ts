@@ -44,7 +44,11 @@ describe("dashboard server", () => {
     expect(health.status).toBe("ok");
     expect(health.sync).toBeDefined();
 
-    const search = await fetchJson(`${server.url}/api/search?query=schema%20migration&limit=10`);
+    const scopedCwd = encodeURIComponent("/Users/chadsimon/code/my-project");
+
+    const search = await fetchJson(
+      `${server.url}/api/search?query=schema%20migration&limit=10&cwd=${scopedCwd}`,
+    );
     expect(Array.isArray(search.observations)).toBe(true);
     expect(search.observations.length).toBeGreaterThan(0);
 
@@ -52,24 +56,28 @@ describe("dashboard server", () => {
     expect(typeof firstId).toBe("number");
 
     const timeline = await fetchJson(
-      `${server.url}/api/timeline?anchor=${firstId}&before=2&after=2`,
+      `${server.url}/api/timeline?anchor=${firstId}&before=2&after=2&cwd=${scopedCwd}`,
     );
     expect(Array.isArray(timeline.observations)).toBe(true);
     expect(timeline.observations.length).toBeGreaterThan(0);
 
-    const stats = await fetchJson(`${server.url}/api/stats`);
+    const stats = await fetchJson(`${server.url}/api/stats?cwd=${scopedCwd}`);
     expect(stats.stats.total).toBeGreaterThan(0);
 
     const projects = await fetchJson(`${server.url}/api/projects?limit=5`);
     expect(Array.isArray(projects.projects)).toBe(true);
     expect(projects.projects.length).toBeGreaterThan(0);
 
-    const sessions = await fetchJson(`${server.url}/api/sessions?limit=5`);
+    const sessions = await fetchJson(`${server.url}/api/sessions?limit=5&cwd=${scopedCwd}`);
     expect(Array.isArray(sessions.sessions)).toBe(true);
     expect(sessions.sessions.length).toBeGreaterThan(0);
 
-    const contextPack = await fetchJson(`${server.url}/api/context_pack?limit=5&sessionLimit=3`);
+    const contextPack = await fetchJson(
+      `${server.url}/api/context_pack?limit=5&sessionLimit=3&cwd=${scopedCwd}`,
+    );
     expect(contextPack.contextPack.highlights.length).toBeGreaterThan(0);
+    expect(Array.isArray(contextPack.contextPack.durableMemories)).toBe(true);
+    expect(contextPack.contextPack.retrievalSummary).toBeDefined();
     expect(typeof contextPack.contextPack.markdown).toBe("string");
 
     const observation = await fetchJson(`${server.url}/api/observation/${firstId}`);
@@ -78,7 +86,10 @@ describe("dashboard server", () => {
     const saved = await fetchJson(`${server.url}/api/save_memory`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: "remember dashboard smoke test" }),
+      body: JSON.stringify({
+        text: "remember dashboard smoke test",
+        cwd: "/Users/chadsimon/code/my-project",
+      }),
     });
 
     expect(saved.status).toBe("saved");
