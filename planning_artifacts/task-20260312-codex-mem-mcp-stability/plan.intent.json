@@ -1,0 +1,43 @@
+{
+  "autonomy_level": "L2_supervised_autonomous",
+  "clarification_governor": {
+    "allowed_topics": [
+      "product_meaning",
+      "authority_security_boundaries",
+      "missing_success_criteria",
+      "non_discoverable_tradeoffs"
+    ],
+    "default_batch_limit": 1,
+    "new_authority_boundary_required_for_mid_execution_clarification": true,
+    "repo_discoverable_questions_forbidden": true
+  },
+  "intent_contract": {
+    "ambiguity_classification": [
+      {
+        "classification": "technical_reversible",
+        "item_id": "amb-1",
+        "statement": "Deterministic extractive fixture generation must be heuristically derived from canonical article content because no existing full-corpus fixture generator exists."
+      }
+    ],
+    "authority_sensitive_decisions": [
+      "Local workspace writes, local test execution, and localhost HTTP calls to the existing stack are authorized because the user explicitly requested implementation of this harness."
+    ],
+    "non_goals": [
+      "Do not change database repair behavior.",
+      "Do not modify the Codex desktop app.",
+      "Do not clean unrelated dirty work already present on the current branch."
+    ],
+    "objective": "Stabilize codex-mem MCP server lifecycle so Codex desktop sessions stop accumulating stale mcp-server child processes and same-data-dir replacement works deterministically.",
+    "objective_shape_status": "accepted_as_given",
+    "success_criteria": [
+      "The MCP server exits promptly when its stdio parent disconnects.",
+      "Starting a second mcp-server against the same data dir replaces the first one safely.",
+      "Runtime lock release is owner-safe and cannot delete a newer owner lock.",
+      "The fix is validated by focused shutdown/takeover tests, full npm test, and direct repro evidence."
+    ]
+  },
+  "objective_intent_ref": "objective.intent.json",
+  "objective_ref": "task-20260312-codex-mem-mcp-stability",
+  "schema_version": "plan-intent.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

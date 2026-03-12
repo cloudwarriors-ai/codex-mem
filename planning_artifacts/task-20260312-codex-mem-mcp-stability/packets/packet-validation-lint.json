@@ -1,0 +1,78 @@
+{
+  "acceptance_checks": [
+    "lint validation capture manifests prove the lane passes"
+  ],
+  "adaptation_policy": "bounded_retry_then_alternate",
+  "allowed_scope": [
+    "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+  ],
+  "alternate_strategies": [],
+  "automatable_acceptance": true,
+  "classification": "ready",
+  "constraints": [
+    "Validation only; no source edits."
+  ],
+  "definition_of_done": {
+    "acceptance_checks": [
+      "lint validation capture manifests prove the lane passes"
+    ],
+    "allowed_scope": [
+      "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+    ],
+    "behavior_outcome": "lint validation completed with evidence.",
+    "evidence_requirements": [
+      "validation capture manifests"
+    ],
+    "objective_linkage": "generated-validation",
+    "rollback_or_fallback": "Stop on failed validation and preserve evidence.",
+    "verifier_acceptance_condition": "Validation command exits successfully."
+  },
+  "dependencies": [
+    "P0",
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "dependency_mode": "accepted_upstream",
+  "evidence_destination": "planning_artifacts/<track-id>/packets/packet-validation-lint.verdict.json",
+  "execution_mode": "parallel_safe",
+  "execution_strategy": "multi_command_pipeline",
+  "external_support_required": true,
+  "failure_signals": [
+    "lint validation fails"
+  ],
+  "fallback_or_rollback": "Stop on failed validation and preserve evidence.",
+  "maintainable_completion_path": true,
+  "max_adaptations": 1,
+  "packet_class": "validation",
+  "packet_id": "packet-validation-lint",
+  "primary_behavior": "Run lint validation for the current objective.",
+  "product_meaning_resolved": true,
+  "prohibited_action_required": false,
+  "shared_surface_categories": [
+    "validation-lane-lint"
+  ],
+  "strategy_inputs": {
+    "commands": [
+      "cd /Users/chadsimon/code/codex-mem && npm test -- --run tests/mcp-server-shutdown.test.ts tests/runtime-lock.test.ts",
+      "cd /Users/chadsimon/code/codex-mem && npm test"
+    ],
+    "cwd": "/Users/chadsimon/code/codex-mem"
+  },
+  "support_expectations": {
+    "expected_evidence_artifacts": [
+      "validation capture manifests"
+    ],
+    "required_step_evidence": [
+      "command://packet-validation-lint:pipeline:1",
+      "command://packet-validation-lint:pipeline:2"
+    ],
+    "support_kind": "validation_lane"
+  },
+  "support_remediation_mode": "validation_packet",
+  "verifier_mapping": "cycle-verifier:packet-validation-lint"
+}

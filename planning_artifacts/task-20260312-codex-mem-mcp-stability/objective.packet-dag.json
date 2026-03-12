@@ -1,0 +1,530 @@
+{
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "packets": [
+    {
+      "acceptance_checks": [
+        "Harness CLI help renders required subcommands",
+        "Corpus export writes expected files",
+        "Existing-Q/A audit writes deterministic index and summary"
+      ],
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+      ],
+      "automatable_acceptance": true,
+      "cancelled_by": "",
+      "classification": "ready",
+      "constraints": [
+        "Reuse export_snapshot_bundle(...) instead of creating a parallel export path.",
+        "Keep the stronger normalized question key harness-local only."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "corpus export outputs exist",
+          "audit outputs exist",
+          "CLI help lists required subcommands"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness exposes stable corpus export and audit subcommands that emit reusable inputs under the governed track.",
+        "evidence_requirements": [
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json",
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/summary.json"
+        ],
+        "objective_linkage": "req-corpus-export",
+        "rollback_or_fallback": "Keep the change additive and stop before fixture generation if export/audit surfaces are incomplete.",
+        "verifier_acceptance_condition": "Verifier can trace corpus identity and audit output from the new CLI."
+      },
+      "dependencies": [],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P0.verdict.json",
+      "execution_mode": "sequence_required",
+      "execution_strategy": "command_capture",
+      "failure_signals": [
+        "cli_import_failure",
+        "missing_corpus_artifacts",
+        "missing_existing_qa_index"
+      ],
+      "fallback_or_rollback": "Stop before fixture generation if the additive input stages are not stable.",
+      "last_cycle_id": "",
+      "last_verifier_output": "",
+      "maintainable_completion_path": true,
+      "packet_class": "implementation",
+      "packet_id": "P0",
+      "primary_behavior": "Implement the additive harness entry surface for corpus export and existing-Q/A audit.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "runtime_state": "queued",
+      "shared_surface_categories": [
+        "harness-cli",
+        "snapshot-export",
+        "fixture-inputs"
+      ],
+      "strategy_inputs": {
+        "command": "cd /Users/chadsimon/code/codex-mem && uv run python scripts/local_qa_regression_harness.py --help",
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "verifier_mapping": "cycle-verifier:P0"
+    },
+    {
+      "acceptance_checks": [
+        "Fixture outputs exist with deterministic ids and digest",
+        "Local preflight records required health and version checks",
+        "run-live-eval persists judged artifacts and local answer rows"
+      ],
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+      ],
+      "automatable_acceptance": true,
+      "cancelled_by": "",
+      "classification": "ready",
+      "constraints": [
+        "Reuse run_live_eval_pack(...) rather than cloning its evaluation flow.",
+        "Fail closed if effective snapshot ids drift from the fixture manifest."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "eval_pack.json exists",
+          "preflight.json exists",
+          "judge-summary.json exists"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness generates a reviewed fixture and runs it safely against the local stack with persisted eval outputs.",
+        "evidence_requirements": [
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json",
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/preflight.json",
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/judge-summary.json"
+        ],
+        "objective_linkage": "req-fixture-and-eval",
+        "rollback_or_fallback": "Stop before miss export/comparison if fixture or preflight evidence is incomplete.",
+        "verifier_acceptance_condition": "Verifier sees fixture identity, local preflight, and runner outputs for the same run."
+      },
+      "dependencies": [
+        "P0"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P1.verdict.json",
+      "execution_mode": "sequence_required",
+      "execution_strategy": "command_capture",
+      "failure_signals": [
+        "fixture_generation_unstable",
+        "preflight_failed",
+        "snapshot_identity_mismatch"
+      ],
+      "fallback_or_rollback": "Do not interpret partial results if preflight or snapshot identity fails.",
+      "last_cycle_id": "",
+      "last_verifier_output": "",
+      "maintainable_completion_path": true,
+      "packet_class": "implementation",
+      "packet_id": "P1",
+      "primary_behavior": "Implement deterministic fixture generation and local eval execution with strict preflight and artifact persistence.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "runtime_state": "queued",
+      "shared_surface_categories": [
+        "fixture-generation",
+        "local-eval",
+        "preflight"
+      ],
+      "strategy_inputs": {
+        "command": "cd /Users/chadsimon/code/codex-mem && uv run python -m py_compile scripts/local_qa_regression_harness.py services/common/qa_regression_harness.py",
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "verifier_mapping": "cycle-verifier:P1"
+    },
+    {
+      "acceptance_checks": [
+        "Miss extraction emits eligible-only JSONL outputs",
+        "Run comparison hard-fails on fixture mismatch",
+        "The run command composes the default end-to-end non-mutating lifecycle path"
+      ],
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+      ],
+      "automatable_acceptance": true,
+      "cancelled_by": "",
+      "classification": "ready",
+      "constraints": [
+        "Do not call lifecycle materialization endpoints in the default run flow.",
+        "Compare runs by stable case_id only after fixture digest and case count match."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "local_misses.jsonl exists",
+          "miss-training-export.jsonl exists",
+          "comparison artifact exists"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness emits reusable corrective exports and deterministic comparison artifacts without mutating lifecycle state.",
+        "evidence_requirements": [
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/miss-training-export.jsonl",
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate/comparison-vs-base.json"
+        ],
+        "objective_linkage": "req-miss-export",
+        "rollback_or_fallback": "If judged inputs are incomplete or incompatible, stop with explicit reasons rather than emitting misleading exports or comparisons.",
+        "verifier_acceptance_condition": "Verifier can trace eligible misses and comparison deltas from the stored artifacts."
+      },
+      "dependencies": [
+        "P1"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P2.verdict.json",
+      "execution_mode": "sequence_required",
+      "execution_strategy": "command_capture",
+      "failure_signals": [
+        "miss_filtering_incorrect",
+        "comparison_identity_guard_missing",
+        "run_surface_skips_required_stage"
+      ],
+      "fallback_or_rollback": "Keep miss export and comparison explicit and fail closed on incomplete judged inputs.",
+      "last_cycle_id": "",
+      "last_verifier_output": "",
+      "maintainable_completion_path": true,
+      "packet_class": "implementation",
+      "packet_id": "P2",
+      "primary_behavior": "Implement miss extraction, deterministic run comparison, and the composed run command surface.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "runtime_state": "queued",
+      "shared_surface_categories": [
+        "miss-export",
+        "run-comparison",
+        "harness-cli"
+      ],
+      "strategy_inputs": {
+        "command": "cd /Users/chadsimon/code/codex-mem && uv run python scripts/local_qa_regression_harness.py --help",
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "verifier_mapping": "cycle-verifier:P2"
+    },
+    {
+      "acceptance_checks": [
+        "Focused harness test proof artifacts are captured and pass",
+        "Full npm test proof artifact is captured and passes",
+        "validate_impl and finalize_gate emit approval artifacts"
+      ],
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+      ],
+      "automatable_acceptance": true,
+      "cancelled_by": "",
+      "classification": "ready",
+      "constraints": [
+        "Keep objective.session.json preplan-shaped; runtime state belongs in checkpoint/status/implementation artifacts.",
+        "Record adaptive-memory evidence in implementation.json."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "focused harness tests pass",
+          "required existing suites pass",
+          "finalize.json ok == true"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness closes with green tests and approved planning-gate implementation/finalize artifacts.",
+        "evidence_requirements": [
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/review.impl.json",
+          "planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+        ],
+        "objective_linkage": "req-governed-closeout",
+        "rollback_or_fallback": "Fix failing tests or governed evidence gaps before asserting completion.",
+        "verifier_acceptance_condition": "Verifier sees passing tests, implementation evidence, and finalize ok=true."
+      },
+      "dependencies": [
+        "P2"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P3.verdict.json",
+      "execution_mode": "sequence_required",
+      "execution_strategy": "validation_command",
+      "failure_signals": [
+        "harness_unit_regression",
+        "shared_suite_regression",
+        "governed_validation_failed"
+      ],
+      "fallback_or_rollback": "Do not claim completion without governed approval artifacts.",
+      "last_cycle_id": "",
+      "last_verifier_output": "",
+      "maintainable_completion_path": true,
+      "packet_class": "validation",
+      "packet_id": "P3",
+      "primary_behavior": "Add focused regression coverage and close the governed track with validated implementation artifacts.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "runtime_state": "queued",
+      "shared_surface_categories": [
+        "tests",
+        "planning-gate"
+      ],
+      "strategy_inputs": {
+        "command": "cd /Users/chadsimon/code/codex-mem && uv run pytest -q tests/unit/test_local_qa_regression_harness.py tests/unit/test_official_docs_eval.py tests/unit/test_snapshot_transfer.py tests/unit/test_lifecycle_control_plane.py",
+        "cwd": "/Users/chadsimon/code/codex-mem",
+        "validation_lane": "tests"
+      },
+      "verifier_mapping": "cycle-verifier:P3"
+    },
+    {
+      "acceptance_checks": [
+        "lint validation capture manifests prove the lane passes"
+      ],
+      "adaptation_policy": "bounded_retry_then_alternate",
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "alternate_strategies": [],
+      "automatable_acceptance": true,
+      "classification": "ready",
+      "constraints": [
+        "Validation only; no source edits."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "lint validation capture manifests prove the lane passes"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+        ],
+        "behavior_outcome": "lint validation completed with evidence.",
+        "evidence_requirements": [
+          "validation capture manifests"
+        ],
+        "objective_linkage": "generated-validation",
+        "rollback_or_fallback": "Stop on failed validation and preserve evidence.",
+        "verifier_acceptance_condition": "Validation command exits successfully."
+      },
+      "dependencies": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/<track-id>/packets/packet-validation-lint.verdict.json",
+      "execution_mode": "parallel_safe",
+      "execution_strategy": "multi_command_pipeline",
+      "external_support_required": true,
+      "failure_signals": [
+        "lint validation fails"
+      ],
+      "fallback_or_rollback": "Stop on failed validation and preserve evidence.",
+      "maintainable_completion_path": true,
+      "max_adaptations": 1,
+      "packet_class": "validation",
+      "packet_id": "packet-validation-lint",
+      "primary_behavior": "Run lint validation for the current objective.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "shared_surface_categories": [
+        "validation-lane-lint"
+      ],
+      "strategy_inputs": {
+        "commands": [
+          "cd /Users/chadsimon/code/codex-mem && npm test -- --run tests/mcp-server-shutdown.test.ts tests/runtime-lock.test.ts",
+          "cd /Users/chadsimon/code/codex-mem && npm test"
+        ],
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "support_expectations": {
+        "expected_evidence_artifacts": [
+          "validation capture manifests"
+        ],
+        "required_step_evidence": [
+          "command://packet-validation-lint:pipeline:1",
+          "command://packet-validation-lint:pipeline:2"
+        ],
+        "support_kind": "validation_lane"
+      },
+      "support_remediation_mode": "validation_packet",
+      "verifier_mapping": "cycle-verifier:packet-validation-lint"
+    },
+    {
+      "acceptance_checks": [
+        "tests validation capture manifests prove the lane passes"
+      ],
+      "adaptation_policy": "bounded_retry_then_alternate",
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "alternate_strategies": [],
+      "automatable_acceptance": true,
+      "classification": "ready",
+      "constraints": [
+        "Validation only; no source edits."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "tests validation capture manifests prove the lane passes"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+        ],
+        "behavior_outcome": "tests validation completed with evidence.",
+        "evidence_requirements": [
+          "validation capture manifests"
+        ],
+        "objective_linkage": "generated-validation",
+        "rollback_or_fallback": "Stop on failed validation and preserve evidence.",
+        "verifier_acceptance_condition": "Validation command exits successfully."
+      },
+      "dependencies": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/<track-id>/packets/packet-validation-tests.verdict.json",
+      "execution_mode": "parallel_safe",
+      "execution_strategy": "multi_command_pipeline",
+      "external_support_required": true,
+      "failure_signals": [
+        "tests validation fails"
+      ],
+      "fallback_or_rollback": "Stop on failed validation and preserve evidence.",
+      "maintainable_completion_path": true,
+      "max_adaptations": 1,
+      "packet_class": "validation",
+      "packet_id": "packet-validation-tests",
+      "primary_behavior": "Run tests validation for the current objective.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "shared_surface_categories": [
+        "validation-lane-tests"
+      ],
+      "strategy_inputs": {
+        "commands": [
+          "cd /Users/chadsimon/code/codex-mem && npm test -- --run tests/mcp-server-shutdown.test.ts tests/runtime-lock.test.ts",
+          "cd /Users/chadsimon/code/codex-mem && npm test",
+          "npm run test"
+        ],
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "support_expectations": {
+        "expected_evidence_artifacts": [
+          "validation capture manifests"
+        ],
+        "required_step_evidence": [
+          "command://packet-validation-tests:pipeline:1",
+          "command://packet-validation-tests:pipeline:2",
+          "command://packet-validation-tests:pipeline:3"
+        ],
+        "support_kind": "validation_lane"
+      },
+      "support_remediation_mode": "validation_packet",
+      "verifier_mapping": "cycle-verifier:packet-validation-tests"
+    },
+    {
+      "acceptance_checks": [
+        "types_build validation capture manifests prove the lane passes"
+      ],
+      "adaptation_policy": "bounded_retry_then_alternate",
+      "allowed_scope": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "alternate_strategies": [],
+      "automatable_acceptance": true,
+      "classification": "ready",
+      "constraints": [
+        "Validation only; no source edits."
+      ],
+      "definition_of_done": {
+        "acceptance_checks": [
+          "types_build validation capture manifests prove the lane passes"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+        ],
+        "behavior_outcome": "types_build validation completed with evidence.",
+        "evidence_requirements": [
+          "validation capture manifests"
+        ],
+        "objective_linkage": "generated-validation",
+        "rollback_or_fallback": "Stop on failed validation and preserve evidence.",
+        "verifier_acceptance_condition": "Validation command exits successfully."
+      },
+      "dependencies": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ],
+      "dependency_mode": "accepted_upstream",
+      "evidence_destination": "planning_artifacts/<track-id>/packets/packet-validation-types-build.verdict.json",
+      "execution_mode": "parallel_safe",
+      "execution_strategy": "multi_command_pipeline",
+      "external_support_required": true,
+      "failure_signals": [
+        "types_build validation fails"
+      ],
+      "fallback_or_rollback": "Stop on failed validation and preserve evidence.",
+      "maintainable_completion_path": true,
+      "max_adaptations": 1,
+      "packet_class": "validation",
+      "packet_id": "packet-validation-types-build",
+      "primary_behavior": "Run types build validation for the current objective.",
+      "product_meaning_resolved": true,
+      "prohibited_action_required": false,
+      "shared_surface_categories": [
+        "validation-lane-types_build"
+      ],
+      "strategy_inputs": {
+        "commands": [
+          "cd /Users/chadsimon/code/codex-mem && npm test -- --run tests/mcp-server-shutdown.test.ts tests/runtime-lock.test.ts",
+          "cd /Users/chadsimon/code/codex-mem && npm test",
+          "npm run typecheck"
+        ],
+        "cwd": "/Users/chadsimon/code/codex-mem"
+      },
+      "support_expectations": {
+        "expected_evidence_artifacts": [
+          "validation capture manifests"
+        ],
+        "required_step_evidence": [
+          "command://packet-validation-types-build:pipeline:1",
+          "command://packet-validation-types-build:pipeline:2",
+          "command://packet-validation-types-build:pipeline:3"
+        ],
+        "support_kind": "validation_lane"
+      },
+      "support_remediation_mode": "validation_packet",
+      "verifier_mapping": "cycle-verifier:packet-validation-types-build"
+    }
+  ],
+  "schema_version": "objective-packet-dag.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

@@ -13,11 +13,20 @@ import {
   statsParamsSchema,
   timelineInputSchema,
 } from "./contracts.js";
-import { MemoryService } from "./memory-service.js";
+import { bootstrapRuntime } from "./db-lifecycle.js";
+import { acquireRuntimeLock } from "./runtime-lock.js";
 import type { MemoryPaths } from "./types.js";
 
 export async function runMcpServer(paths: MemoryPaths): Promise<void> {
-  const service = new MemoryService(paths);
+  const runtime = await bootstrapRuntime(paths, "mcp-server");
+  if (!runtime.service) {
+    throw new Error("MCP server cannot start without a healthy database");
+  }
+  const service = runtime.service;
+  const lock = acquireRuntimeLock(paths, "mcp-server", {
+    replaceExisting: true,
+    expectedCommandSubstrings: ["cli.js", "mcp-server"],
+  });
 
   const server = new McpServer({
     name: "codex-mem",
@@ -447,6 +456,10 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
   );
 
   const transport = new StdioServerTransport();
+  transport.onclose = gracefulShutdown;
+  transport.onerror = () => {
+    gracefulShutdown();
+  };
 
   let shuttingDown = false;
   let forcedExitTimer: NodeJS.Timeout | null = null;
@@ -455,6 +468,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     forcedExitTimer = setTimeout(() => {
+      lock.release();
       service.close();
       process.exit(0);
     }, 250);
@@ -470,6 +484,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           clearTimeout(forcedExitTimer);
           forcedExitTimer = null;
         }
+        lock.release();
         service.close();
         process.exit(0);
       });
@@ -481,10 +496,17 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
   // StdioServerTransport does not listen for stdin 'end'. When the parent
   // process closes the pipe (session ends), the server would stay alive
   // forever. Treat stdin closure as a shutdown signal.
+  process.stdin.resume();
   process.stdin.on("end", gracefulShutdown);
   process.stdin.on("close", gracefulShutdown);
 
-  await server.connect(transport);
+  try {
+    await server.connect(transport);
+  } catch (error) {
+    lock.release();
+    service.close();
+    throw error;
+  }
 }
 
 function toolError(error: unknown): {

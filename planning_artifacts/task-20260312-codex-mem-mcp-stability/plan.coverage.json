@@ -1,0 +1,202 @@
+{
+  "integration_map": [
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/bundle.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json"
+      ],
+      "integration_id": "int-snapshot-export",
+      "packet_ids": [
+        "P0"
+      ],
+      "touchpoint": "services/common/snapshot_transfer.py -> harness corpus export artifacts",
+      "verification": [
+        "export-corpus command writes bundle and split JSONL outputs"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/preflight.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/judge-row-results.json"
+      ],
+      "integration_id": "int-live-eval-runner",
+      "packet_ids": [
+        "P1"
+      ],
+      "touchpoint": "scripts/official_docs_eval.py -> run_live_eval_pack(...) -> local orchestrator/review/mcp stack",
+      "verification": [
+        "run-local-eval persists preflight, local_answers, judge-row-results, and judge-summary outputs"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/miss-training-export.jsonl",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate/comparison-vs-base.json"
+      ],
+      "integration_id": "int-miss-export-and-compare",
+      "packet_ids": [
+        "P2"
+      ],
+      "touchpoint": "scripts/build_reviewed_eval_misses.py semantics + harness comparison logic -> corrective exports and comparison artifacts",
+      "verification": [
+        "extract-misses writes miss JSONL outputs",
+        "compare-runs writes deterministic comparison output"
+      ]
+    }
+  ],
+  "objective_coverage_map": [
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/bundle.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json"
+      ],
+      "packet_ids": [
+        "P0"
+      ],
+      "requirement_id": "req-corpus-export",
+      "verification": [
+        "uv run python scripts/local_qa_regression_harness.py export-corpus --out-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/existing_qa_index.jsonl",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/summary.json"
+      ],
+      "packet_ids": [
+        "P0"
+      ],
+      "requirement_id": "req-existing-qa-dedupe",
+      "verification": [
+        "uv run python scripts/local_qa_regression_harness.py audit-existing-qa --out-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/preflight.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/judge-summary.json"
+      ],
+      "packet_ids": [
+        "P1"
+      ],
+      "requirement_id": "req-fixture-and-eval",
+      "verification": [
+        "uv run python scripts/local_qa_regression_harness.py generate-fixture --corpus-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus --existing-qa-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa --out-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture",
+        "uv run python scripts/local_qa_regression_harness.py run-local-eval --fixture-json planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json --run-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/local_misses.jsonl",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/miss-training-export.jsonl"
+      ],
+      "packet_ids": [
+        "P2"
+      ],
+      "requirement_id": "req-miss-export",
+      "verification": [
+        "uv run python scripts/local_qa_regression_harness.py extract-misses --run-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate/comparison-vs-base.json"
+      ],
+      "packet_ids": [
+        "P2"
+      ],
+      "requirement_id": "req-run-comparison",
+      "verification": [
+        "uv run python scripts/local_qa_regression_harness.py compare-runs --baseline-run-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/base --candidate-run-dir planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate"
+      ]
+    },
+    {
+      "evidence": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/implementation.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+      ],
+      "packet_ids": [
+        "P3"
+      ],
+      "requirement_id": "req-governed-closeout",
+      "verification": [
+        "python3 /Users/chadsimon/.codex/skills/planning-gate/scripts/validate_impl.py --plan-json /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.json --impl-json /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/implementation.json --review-json-out /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/review.impl.json --track-id task-20260312-codex-mem-mcp-stability",
+        "python3 /Users/chadsimon/.codex/skills/planning-gate/scripts/finalize_gate.py --plan-json /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.json --impl-json /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/implementation.json --review-json /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/review.impl.json --track-id task-20260312-codex-mem-mcp-stability --out /Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+      ]
+    }
+  ],
+  "objective_ref": "task-20260312-codex-mem-mcp-stability",
+  "packet_ids": [
+    "P0",
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "requirement_ids": [
+    "req-corpus-export",
+    "req-existing-qa-dedupe",
+    "req-fixture-and-eval",
+    "req-governed-closeout",
+    "req-miss-export",
+    "req-run-comparison"
+  ],
+  "requirement_risk_rank": [
+    {
+      "associated_packet_ids": [
+        "P0"
+      ],
+      "evidence_type": "snapshot_export_artifacts",
+      "failure_impact": "All later fixture generation would use the wrong corpus or missing identity data.",
+      "priority": "critical",
+      "requirement_id": "req-corpus-export"
+    },
+    {
+      "associated_packet_ids": [
+        "P0"
+      ],
+      "evidence_type": "dedupe_index_output",
+      "failure_impact": "The generated fixture could duplicate existing training or eval content and pollute corrective exports.",
+      "priority": "core",
+      "requirement_id": "req-existing-qa-dedupe"
+    },
+    {
+      "associated_packet_ids": [
+        "P1"
+      ],
+      "evidence_type": "fixture_and_eval_bundle",
+      "failure_impact": "The harness would not prove local answer behavior against a deterministic fixture.",
+      "priority": "critical",
+      "requirement_id": "req-fixture-and-eval"
+    },
+    {
+      "associated_packet_ids": [
+        "P2"
+      ],
+      "evidence_type": "miss_export_artifacts",
+      "failure_impact": "Corrective training outputs would include wrong or duplicate rows, weakening downstream use.",
+      "priority": "core",
+      "requirement_id": "req-miss-export"
+    },
+    {
+      "associated_packet_ids": [
+        "P2"
+      ],
+      "evidence_type": "comparison_artifact",
+      "failure_impact": "Run deltas could be misleading or non-deterministic.",
+      "priority": "core",
+      "requirement_id": "req-run-comparison"
+    },
+    {
+      "associated_packet_ids": [
+        "P3"
+      ],
+      "evidence_type": "planning_gate_artifacts",
+      "failure_impact": "The work would lack auditable approval even if the code passes tests.",
+      "priority": "critical",
+      "requirement_id": "req-governed-closeout"
+    }
+  ],
+  "schema_version": "plan-coverage.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

@@ -1,0 +1,49 @@
+{
+  "current_frontier": [
+    "P0"
+  ],
+  "entries": [
+    {
+      "execution_mode": "sequence_required",
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P0",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P1"
+      ]
+    },
+    {
+      "execution_mode": "sequence_required",
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P1",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P2"
+      ]
+    },
+    {
+      "execution_mode": "sequence_required",
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P2",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P3"
+      ]
+    },
+    {
+      "execution_mode": "sequence_required",
+      "isolates_blocker": false,
+      "movement_type": "closure_advancing",
+      "packet_id": "P3",
+      "resolves_dependency_classification": false,
+      "unlocks_packets": []
+    }
+  ],
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "safe_momentum_ready": true,
+  "schema_version": "objective-momentum.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

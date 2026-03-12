@@ -1,0 +1,26 @@
+{
+  "hardening_budget": {
+    "max_authority_blockers_before_blocked": 1,
+    "max_hardening_passes": 2,
+    "max_repacketization_passes": 1,
+    "max_unresolved_gaps_before_revise": 1
+  },
+  "objective_ref": "task-20260312-codex-mem-mcp-stability",
+  "plan_gap_report": {
+    "gaps_auto_fixed": [
+      "Locked the harness to additive CLI/helper code and governed artifacts under the task track.",
+      "Locked fixture identity matching as a hard comparison precondition.",
+      "Locked lifecycle mutation out of the default run path."
+    ],
+    "gaps_detected": [
+      "No reusable local full-corpus harness exists yet.",
+      "Deterministic full-corpus fixture generation must be implemented from canonical article content.",
+      "Local executor admin identity may require a derived or explicit URL for preflight."
+    ],
+    "gaps_escalated": [],
+    "gaps_unresolved": []
+  },
+  "schema_version": "plan-gap-report.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability",
+  "unresolved_gap_count": 0
+}

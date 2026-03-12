@@ -1,0 +1,40 @@
+{
+  "captured_at": "2026-03-12T11:55:15+00:00",
+  "command_argv": [
+    "bash",
+    "-lc",
+    "cd /Users/chadsimon/code/codex-mem && node - <<'NODE'\nconst {spawn} = require('child_process');\nconst {mkdtempSync} = require('fs');\nconst {tmpdir} = require('os');\nconst {join} = require('path');\nconst home = mkdtempSync(join(tmpdir(), 'codex-mem-repro-'));\nconst child = spawn(process.execPath, ['dist/cli.js', 'mcp-server'], {stdio: ['pipe','pipe','pipe'], env: {...process.env, HOME: home}});\nconst started = Date.now();\nsetTimeout(() => child.stdin.end(), 500);\nchild.on('exit', (code, signal) => {\n  console.log(JSON.stringify({scenario:'stdin-close', code, signal, elapsed_ms: Date.now()-started}));\n  process.exit([0,1].includes(code) ? 0 : 3);\n});\nsetTimeout(() => {\n  try { child.kill('SIGKILL'); } catch {}\n  console.log(JSON.stringify({scenario:'stdin-close', timeout:true, elapsed_ms: Date.now()-started}));\n  process.exit(2);\n}, 7000);\nNODE"
+  ],
+  "cwd": "/Users/chadsimon/code/codex-mem",
+  "duration_ms": 232,
+  "ended_at": "2026-03-12T11:55:15+00:00",
+  "env_whitelist": {
+    "HOME": "/Users/chadsimon",
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
+    "PATH": "/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/opt/homebrew/bin:/Users/chadsimon/.codex/tmp/arg0/codex-arg0MlyisK:/Users/chadsimon/.opencode/bin:/Users/chadsimon/.rbenv/shims:/Users/chadsimon/.rbenv/bin:/Users/chadsimon/.local/bin:/Applications/Codex.app/Contents/Resources",
+    "PWD": "/Users/chadsimon/code/codex-mem",
+    "SHELL": "/bin/zsh",
+    "TMPDIR": "/var/folders/8g/yc19qrvx1p5f65_tdtpj2fqw0000gn/T/",
+    "USER": "chadsimon"
+  },
+  "exit_code": 0,
+  "name": "smoke-stdin-close",
+  "output_truncated": false,
+  "producer": "run_cmd_capture.v1",
+  "safety": {
+    "decision": "ok",
+    "override_reason": "",
+    "override_used": false
+  },
+  "schema_version": "run-cmd-capture.v1",
+  "stage": "75%",
+  "started_at": "2026-03-12T11:55:15+00:00",
+  "stderr_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/captures/1773316515-smoke-stdin-close-75/stderr.redacted.txt",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/captures/1773316515-smoke-stdin-close-75/stdout.redacted.txt",
+  "stdout_sha256": "a171d21a15f53991b67fa5add1f12e2bd9ffd3bd6678d554670ee3a9830b48cd",
+  "timeout_exceeded": false,
+  "timeout_sec": 300,
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

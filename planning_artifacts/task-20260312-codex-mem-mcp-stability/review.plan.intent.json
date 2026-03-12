@@ -1,0 +1,22 @@
+{
+  "blocked_fields": [],
+  "content": "Canonical objective intent artifact emitted.",
+  "gate": "intent-compiler",
+  "meta": {
+    "artifacts": {
+      "intent": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.intent.json",
+      "objective_intent": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.intent.json",
+      "readiness": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.readiness.json"
+    },
+    "clarification_needed": false,
+    "clarification_reasons": [],
+    "objective_shape_status": "accepted_as_given",
+    "track_id": "task-20260312-codex-mem-mcp-stability",
+    "track_token": "task-20260312-codex-mem-mcp-stability"
+  },
+  "missing_fields": [],
+  "next_step": "Run initialize_session.py using objective.intent.json, then compile_plan.py.",
+  "risks": [],
+  "status": "approve",
+  "type": "planning_gate_review"
+}

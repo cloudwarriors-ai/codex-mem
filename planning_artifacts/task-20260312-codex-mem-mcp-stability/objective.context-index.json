@@ -1,0 +1,21 @@
+{
+  "active_objective_docs": [
+    "planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.intent.json"
+  ],
+  "categories": {
+    "active_objective_docs": [],
+    "architecture_docs": [],
+    "design_docs": [],
+    "execution_docs": [],
+    "schema_contract_docs": [],
+    "security_policy_docs": [
+      "/Users/chadsimon/code/codex-mem/docs/SECURITY_SWEEP.md"
+    ],
+    "test_runbook_docs": []
+  },
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "schema_version": "objective-context-index.v1",
+  "source": "generated",
+  "source_path": "",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

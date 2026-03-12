@@ -1,0 +1,1 @@
+{"scenario":"takeover","first_exit_code":0,"first_exit_signal":null,"lock_pid":35969,"second_pid":35969,"elapsed_ms":751}

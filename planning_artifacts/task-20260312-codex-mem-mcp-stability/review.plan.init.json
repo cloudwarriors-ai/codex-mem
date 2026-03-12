@@ -1,0 +1,20 @@
+{
+  "blocked_fields": [],
+  "content": "Pre-plan session scaffolding artifacts emitted.",
+  "gate": "session-initializer",
+  "meta": {
+    "artifacts": {
+      "checkpoint": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.checkpoint.json",
+      "context_index": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.context-index.json",
+      "progress": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.progress.jsonl",
+      "session": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.session.json"
+    },
+    "track_id": "task-20260312-codex-mem-mcp-stability",
+    "track_token": "task-20260312-codex-mem-mcp-stability"
+  },
+  "missing_fields": [],
+  "next_step": "Run compile_plan.py, verify_plan.py, and validate_plan.py.",
+  "risks": [],
+  "status": "approve",
+  "type": "planning_gate_review"
+}

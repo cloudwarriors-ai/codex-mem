@@ -1,0 +1,69 @@
+{
+  "acceptance_checks": [
+    "Harness CLI help renders required subcommands",
+    "Corpus export writes expected files",
+    "Existing-Q/A audit writes deterministic index and summary"
+  ],
+  "allowed_scope": [
+    "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+  ],
+  "automatable_acceptance": true,
+  "cancelled_by": "",
+  "classification": "ready",
+  "constraints": [
+    "Reuse export_snapshot_bundle(...) instead of creating a parallel export path.",
+    "Keep the stronger normalized question key harness-local only."
+  ],
+  "definition_of_done": {
+    "acceptance_checks": [
+      "corpus export outputs exist",
+      "audit outputs exist",
+      "CLI help lists required subcommands"
+    ],
+    "allowed_scope": [
+      "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+    ],
+    "behavior_outcome": "The harness exposes stable corpus export and audit subcommands that emit reusable inputs under the governed track.",
+    "evidence_requirements": [
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json",
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/summary.json"
+    ],
+    "objective_linkage": "req-corpus-export",
+    "rollback_or_fallback": "Keep the change additive and stop before fixture generation if export/audit surfaces are incomplete.",
+    "verifier_acceptance_condition": "Verifier can trace corpus identity and audit output from the new CLI."
+  },
+  "dependencies": [],
+  "dependency_mode": "accepted_upstream",
+  "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P0.verdict.json",
+  "execution_mode": "sequence_required",
+  "execution_strategy": "command_capture",
+  "failure_signals": [
+    "cli_import_failure",
+    "missing_corpus_artifacts",
+    "missing_existing_qa_index"
+  ],
+  "fallback_or_rollback": "Stop before fixture generation if the additive input stages are not stable.",
+  "last_cycle_id": "",
+  "last_verifier_output": "",
+  "maintainable_completion_path": true,
+  "packet_class": "implementation",
+  "packet_id": "P0",
+  "primary_behavior": "Implement the additive harness entry surface for corpus export and existing-Q/A audit.",
+  "product_meaning_resolved": true,
+  "prohibited_action_required": false,
+  "runtime_state": "queued",
+  "shared_surface_categories": [
+    "harness-cli",
+    "snapshot-export",
+    "fixture-inputs"
+  ],
+  "strategy_inputs": {
+    "command": "cd /Users/chadsimon/code/codex-mem && uv run python scripts/local_qa_regression_harness.py --help",
+    "cwd": "/Users/chadsimon/code/codex-mem"
+  },
+  "verifier_mapping": "cycle-verifier:P0"
+}

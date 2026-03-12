@@ -1,0 +1,12 @@
+{
+  "packet_id": "packet-validation-tests",
+  "strategy_name": "multi_command_pipeline",
+  "runner_kind": "verifier",
+  "runtime_state": "accepted",
+  "verifier_output": "accepted",
+  "allowed_scope_status": "within_scope",
+  "support_status": "supported",
+  "unsupported_risk_reason": "",
+  "changed_files": [],
+  "updated_at": "2026-03-12T11:58:06Z"
+}

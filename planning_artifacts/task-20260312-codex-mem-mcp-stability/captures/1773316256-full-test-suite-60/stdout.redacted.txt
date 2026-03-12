@@ -1,0 +1,28 @@
+
+> codex-mem@0.1.1 test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/Users/chadsimon/code/codex-mem[39m
+
+ [32m✓[39m tests/runtime-lock.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/utils.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/contracts.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/retrieval-benchmark.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 33[2mms[22m[39m
+ [32m✓[39m tests/worker.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+ [32m✓[39m tests/db-lifecycle.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m tests/cli-lifecycle.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/cli-entry.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/dashboard-server.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 78[2mms[22m[39m
+ [32m✓[39m tests/memory-service.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 123[2mms[22m[39m
+ [32m✓[39m tests/mcp-server-shutdown.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 2444[2mms[22m[39m
+     [33m[2m✓[22m[39m exits when stdin is closed for a plain stdio child [33m 565[2mms[22m[39m
+     [33m[2m✓[22m[39m exits when stdin is closed (parent disconnects) [33m 558[2mms[22m[39m
+     [33m[2m✓[22m[39m replaces an existing mcp-server for the same data dir [33m 812[2mms[22m[39m
+     [33m[2m✓[22m[39m exits on SIGTERM [33m 509[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m11 passed[39m[22m[90m (11)[39m
+[2m      Tests [22m [1m[32m39 passed[39m[22m[90m (39)[39m
+[2m   Start at [22m 07:50:56
+[2m   Duration [22m 2.61s[2m (transform 969ms, setup 0ms, import 1.62s, tests 2.79s, environment 1ms)[22m
+
