@@ -20,7 +20,7 @@ import {
   timelineInputSchema,
 } from "./contracts.js";
 import { MemoryService } from "./memory-service.js";
-import { runMcpServer } from "./mcp-server.js";
+import { runMcpServer, runMcpSseServer } from "./mcp-server.js";
 import { startDashboardServer } from "./dashboard-server.js";
 import { runWorker } from "./worker.js";
 
@@ -49,6 +49,7 @@ Usage:
   codex-mem worker [--interval-seconds N] [--run-once] [--json]
   codex-mem dashboard [--host HOST] [--port PORT]
   codex-mem mcp-server
+  codex-mem mcp-sse-server [--host HOST] [--port PORT]
   codex-mem init-mcp [--name NAME]
 `;
 
@@ -65,6 +66,13 @@ export async function main(argv = process.argv): Promise<void> {
 
   if (command === "mcp-server") {
     await runMcpServer(paths);
+    return;
+  }
+
+  if (command === "mcp-sse-server") {
+    const host = parseStringFlag(parsed.flags.host);
+    const port = parseIntFlag(parsed.flags.port);
+    await runMcpSseServer(paths, { host, port });
     return;
   }
 

@@ -1,9 +1,13 @@
-FROM node:22-alpine AS builder
+FROM node:22-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci
 
 COPY tsconfig.build.json tsconfig.json ./
 COPY src/ src/
@@ -11,12 +15,16 @@ COPY src/ src/
 RUN npm run build
 
 # ------- runtime -------
-FROM node:22-alpine
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ wget \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts
+RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist/ dist/
 
