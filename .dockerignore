@@ -1,0 +1,7 @@
+.git
+node_modules
+dist
+.docker
+npm-debug.log
+yarn.lock
+.DS_Store

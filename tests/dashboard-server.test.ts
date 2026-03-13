@@ -9,6 +9,8 @@ const createdRoots: string[] = [];
 const activeServers: DashboardServer[] = [];
 
 afterEach(async () => {
+  delete process.env.CODEX_MEM_FORCE_PROBE_FAILURE;
+  delete process.env.CODEX_MEM_RUNTIME_CONTEXT;
   while (activeServers.length > 0) {
     const server = activeServers.pop();
     if (server) await server.close();
@@ -42,7 +44,7 @@ describe("dashboard server", () => {
 
     const health = await fetchJson(`${server.url}/api/health`);
     expect(health.status).toBe("ok");
-    expect(health.sync).toBeDefined();
+    expect(health.dbHealth).toBe("ok");
 
     const scopedCwd = encodeURIComponent("/Users/chadsimon/code/my-project");
 
@@ -124,6 +126,46 @@ describe("dashboard server", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("INVALID_INPUT");
+  });
+
+  it("starts in degraded mode for a corrupted database and blocks non-health API access", async () => {
+    const paths = createFixture();
+    writeFileSync(paths.dbPath, "not sqlite", "utf8");
+
+    const server = await startDashboardServer(paths, { host: "127.0.0.1", port: 0 });
+    activeServers.push(server);
+
+    const health = await fetchJson(`${server.url}/api/health`);
+    expect(health.status).toBe("degraded");
+    expect(health.dbHealth).toMatch(/db_(unreadable|corrupt)/);
+    expect(health.servicePathHealth).toBe("service_probe_skipped");
+
+    const searchRes = await fetch(`${server.url}/api/search?query=test`);
+    expect(searchRes.status).toBe(503);
+    const body = (await searchRes.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("DB_DEGRADED");
+  });
+
+  it("reports service-path degradation separately from DB corruption", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+    process.env.CODEX_MEM_FORCE_PROBE_FAILURE = "query_smoke_search:error:forced service probe failure";
+    process.env.CODEX_MEM_RUNTIME_CONTEXT = "docker";
+
+    const server = await startDashboardServer(paths, { host: "127.0.0.1", port: 0 });
+    activeServers.push(server);
+
+    const health = await fetchJson(`${server.url}/api/health`);
+    expect(health.status).toBe("degraded");
+    expect(health.dbHealth).toBe("ok");
+    expect(health.servicePathHealth).toBe("query_path_error");
+    expect(health.runtimeContext).toBe("docker");
+    expect(health.serviceStatus).toBe("db_ok_service_degraded");
+
+    const searchRes = await fetch(`${server.url}/api/search?query=test`);
+    expect(searchRes.status).toBe(503);
+    const body = (await searchRes.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("DB_DEGRADED");
   });
 
   it("validates type filters, id routes, module paths, and malformed JSON payloads", async () => {

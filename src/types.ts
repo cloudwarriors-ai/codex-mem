@@ -70,6 +70,11 @@ export interface SearchOptions {
   scopeMode?: ScopeMode | undefined;
 }
 
+export interface SearchResultBundle {
+  observations: ObservationRecord[];
+  retrievalSummary: RetrievalSummary;
+}
+
 export interface TimelineOptions {
   before?: number | undefined;
   after?: number | undefined;
@@ -238,6 +243,101 @@ export interface SyncResult {
   status: "ok";
   filesScanned: number;
   observationsInserted: number;
+}
+
+export type DatabaseHealthStatus =
+  | "ok"
+  | "db_missing"
+  | "db_corrupt"
+  | "schema_invalid"
+  | "db_unreadable";
+
+export type ServiceProbeName =
+  | "query_smoke_search"
+  | "query_smoke_context"
+  | "query_smoke_sessions"
+  | "sync_dry_probe";
+
+export type ServiceProbeStatus = "ok" | "timeout" | "error" | "skipped";
+
+export type ServicePathHealthStatus =
+  | "service_ok"
+  | "query_path_timeout"
+  | "query_path_error"
+  | "service_probe_skipped";
+
+export type RuntimeContext = "host" | "docker";
+
+export type RuntimeSurface = "worker" | "dashboard" | "mcp-server" | "cli";
+
+export interface ServiceProbeResult {
+  probe: ServiceProbeName;
+  status: ServiceProbeStatus;
+  errorMessage?: string | undefined;
+  durationMs: number;
+}
+
+export type DatabaseOverallStatus =
+  | DatabaseHealthStatus
+  | "db_ok_service_ok"
+  | "db_ok_service_degraded"
+  | "db_missing_service_ok"
+  | "db_missing_service_degraded";
+
+export interface DatabasePragmas {
+  journalMode: string;
+  synchronous: number;
+  walAutocheckpoint: number;
+  foreignKeys: number;
+  busyTimeout: number;
+}
+
+export interface SnapshotMetadata {
+  id: string;
+  path: string;
+  createdAt: string;
+  reason: string;
+  status: "healthy" | "recovery_source" | "failed_preflight";
+  schemaVersion: number;
+  observationCount: number;
+  durableMemoryCount: number;
+  sourceOffsetCount: number;
+}
+
+export interface SnapshotManifest {
+  snapshots: SnapshotMetadata[];
+}
+
+export interface DatabaseHealthReport {
+  status: DatabaseOverallStatus;
+  dbHealth: DatabaseHealthStatus;
+  servicePathHealth: ServicePathHealthStatus;
+  runtimeContext: RuntimeContext;
+  checkedAt: string;
+  dbPath: string;
+  safeToStart: boolean;
+  schemaVersion: number;
+  pragmas: DatabasePragmas | null;
+  degradedReason?: string | undefined;
+  quickCheck?: string | undefined;
+  latestHealthySnapshot?: SnapshotMetadata | undefined;
+  latestSnapshot?: SnapshotMetadata | undefined;
+  lastQueryProbeAt?: string | undefined;
+  lastQueryProbeResults?: ServiceProbeResult[] | undefined;
+}
+
+export interface DatabaseRepairReport {
+  status: "repaired" | "blocked" | "failed";
+  sourcePath: string;
+  repairedPath?: string | undefined;
+  incidentDir: string;
+  checkedAt: string;
+  schemaVersion: number;
+  observationCount: number;
+  durableMemoryCount: number;
+  sourceOffsetCount: number;
+  validationStatus: DatabaseHealthStatus;
+  validationMessage: string;
 }
 
 export interface MemoryPaths {

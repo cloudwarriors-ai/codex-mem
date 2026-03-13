@@ -18,6 +18,7 @@ import type {
   SourceOffsetRecord,
   TimelineOptions,
 } from "./types.js";
+import { CURRENT_SCHEMA_VERSION, configurePragmas } from "./db-pragmas.js";
 
 export class MemoryRepository {
   private readonly db: Database.Database;
@@ -28,10 +29,10 @@ export class MemoryRepository {
 
   constructor(dbPath: string) {
     this.db = new Database(dbPath);
-    this.db.pragma("journal_mode = WAL");
-    this.db.pragma("foreign_keys = ON");
+    configurePragmas(this.db);
 
     initializeRepositorySchema(this.db);
+    this.db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
 
     this.offsets = new SourceOffsetStore(this.db);
     this.observations = new ObservationStore(this.db);
@@ -40,7 +41,16 @@ export class MemoryRepository {
   }
 
   close(): void {
+    this.checkpoint("truncate");
     this.db.close();
+  }
+
+  checkpoint(mode: "passive" | "truncate" = "passive"): void {
+    this.db.pragma(`wal_checkpoint(${mode.toUpperCase()})`);
+  }
+
+  async backupTo(destinationPath: string): Promise<void> {
+    await this.db.backup(destinationPath);
   }
 
   getOffset(sourcePath: string): SourceOffsetRecord | null {

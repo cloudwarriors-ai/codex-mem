@@ -19,10 +19,20 @@ import {
   statsParamsSchema,
   timelineInputSchema,
 } from "./contracts.js";
-import { MemoryService } from "./memory-service.js";
+import {
+  bootstrapRuntime,
+  createSnapshot,
+  DatabaseHealthError,
+  getStatusReport,
+  rebuildQueryLayer,
+  recoverDatabase,
+  repairDatabase,
+  runServiceProbeCommand,
+} from "./db-lifecycle.js";
 import { runMcpServer } from "./mcp-server.js";
 import { startDashboardServer } from "./dashboard-server.js";
 import { runWorker } from "./worker.js";
+import type { RuntimeSurface, ServiceProbeName } from "./types.js";
 
 interface ParsedArgs {
   command: string;
@@ -47,6 +57,12 @@ Usage:
   codex-mem sessions [--cwd PATH] [--limit N] [--scope-mode MODE] [--json]
   codex-mem build-context [--query TEXT] [--cwd PATH] [--limit N] [--session-limit N] [--preference-keys CSV] [--preference-limit N] [--scope-mode MODE] [--json]
   codex-mem worker [--interval-seconds N] [--run-once] [--json]
+  codex-mem doctor [--json]
+  codex-mem status [--json]
+  codex-mem snapshot-now [--json]
+  codex-mem repair-db [--mode MODE] [--json]
+  codex-mem rebuild-query-layer [--json]
+  codex-mem recover [--mode MODE] [--json]
   codex-mem dashboard [--host HOST] [--port PORT]
   codex-mem mcp-server
   codex-mem init-mcp [--name NAME]
@@ -127,7 +143,72 @@ export async function main(argv = process.argv): Promise<void> {
     return;
   }
 
-  const service = new MemoryService(paths);
+  if (command === "doctor" || command === "status") {
+    print({ health: await getStatusReport(paths) }, parsed.flags.json);
+    return;
+  }
+
+  if (command === "snapshot-now") {
+    const snapshot = await createSnapshot(paths, "cli-snapshot");
+    print({ status: "snapshotted", snapshot }, parsed.flags.json);
+    return;
+  }
+
+  if (command === "repair-db") {
+    const mode = (parseStringFlag(parsed.flags.mode) ?? "db") as "db" | "service-path" | "auto";
+    const report =
+      mode === "service-path"
+        ? await rebuildQueryLayer(paths)
+        : mode === "auto"
+          ? (await recoverDatabase(paths, "auto")).report
+          : repairDatabase(paths);
+    print({ report }, parsed.flags.json);
+    if (report.status !== "repaired") {
+      process.exitCode = 2;
+    }
+    return;
+  }
+
+  if (command === "rebuild-query-layer") {
+    const report = await rebuildQueryLayer(paths);
+    print({ report }, parsed.flags.json);
+    if (report.status !== "repaired") {
+      process.exitCode = 2;
+    }
+    return;
+  }
+
+  if (command === "recover") {
+    const mode = (parseStringFlag(parsed.flags.mode) ?? "auto") as "db" | "service-path" | "auto";
+    const recovery = await recoverDatabase(paths, mode);
+    print({ recovery }, parsed.flags.json);
+    if (recovery.report.status !== "repaired") {
+      process.exitCode = 2;
+    }
+    return;
+  }
+
+  if (command === "service-probe") {
+    const probe = parseStringFlag(parsed.flags.probe) as ServiceProbeName | null;
+    const surface = (parseStringFlag(parsed.flags.surface) ?? "cli") as RuntimeSurface;
+    if (!probe) {
+      throw new Error("service-probe requires --probe");
+    }
+    const probeResult = await runServiceProbeCommand(paths, probe, surface);
+    print({ probe: probeResult }, true);
+    if (probeResult.status !== "ok") {
+      process.exitCode = 2;
+    }
+    return;
+  }
+
+  const runtime = await bootstrapRuntime(paths, "cli", {
+    skipServicePathPreflight: Boolean(process.env.CODEX_MEM_SKIP_SERVICE_PATH_PREFLIGHT),
+  });
+  if (!runtime.service) {
+    throw new Error("CLI cannot run without a healthy database");
+  }
+  const service = runtime.service;
 
   try {
     switch (command) {
@@ -421,10 +502,15 @@ function runInitMcp(nameFlag: string | boolean | undefined): void {
 
 if (isDirectCliInvocation(import.meta.url, process.argv[1])) {
   void main().catch((error: unknown) => {
+    if (error instanceof DatabaseHealthError) {
+      process.stderr.write(
+        `${JSON.stringify({ error: { code: "DB_HEALTH_ERROR", message: error.message }, health: error.report }, null, 2)}\n`,
+      );
+      process.exit(2);
+      return;
+    }
     const message = error instanceof Error ? error.message : String(error);
-    process.stderr.write(
-      `${JSON.stringify({ error: { code: "CLI_ERROR", message } }, null, 2)}\n`,
-    );
+    process.stderr.write(`${JSON.stringify({ error: { code: "CLI_ERROR", message } }, null, 2)}\n`);
     process.exit(1);
   });
 }

@@ -1,0 +1,53 @@
+x-codex-mem-common: &codex-mem-common
+  build:
+    context: .
+    dockerfile: Dockerfile.debian
+  image: codex-mem:debian
+  working_dir: /workspace
+  volumes:
+    - .:/workspace
+    - codex_mem_node_modules:/workspace/node_modules
+    - ${HOME}/.codex:/root/.codex
+    - ${HOME}/.codex-mem:/root/.codex-mem
+  environment:
+    - CODEX_HOME=/root/.codex
+
+services:
+  codex-mem-shell:
+    <<: *codex-mem-common
+    environment:
+      - CODEX_HOME=/root/.codex
+      - CODEX_MEM_BUILD_ON_START=0
+    command: bash
+    stdin_open: true
+    tty: true
+
+  codex-mem-worker:
+    <<: *codex-mem-common
+    environment:
+      - CODEX_HOME=/root/.codex
+      - CODEX_MEM_BUILD_ON_START=1
+    command: node dist/cli.js worker --interval-seconds 300
+    restart: unless-stopped
+
+  codex-mem-dashboard:
+    <<: *codex-mem-common
+    environment:
+      - CODEX_HOME=/root/.codex
+      - CODEX_MEM_BUILD_ON_START=1
+    command: node dist/cli.js dashboard --host 0.0.0.0 --port 37811
+    ports:
+      - "37811:37811"
+    restart: unless-stopped
+
+  codex-mem-mcp:
+    <<: *codex-mem-common
+    environment:
+      - CODEX_HOME=/root/.codex
+      - CODEX_MEM_BUILD_ON_START=1
+    command: node dist/cli.js mcp-server
+    stdin_open: true
+    tty: true
+
+volumes:
+  codex_mem_node_modules:

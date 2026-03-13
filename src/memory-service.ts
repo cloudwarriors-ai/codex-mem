@@ -35,6 +35,7 @@ import type {
   ResolvePreferencesOptions,
   ResolvedPreference,
   SearchOptions,
+  SearchResultBundle,
   SessionListOptions,
   SessionSummary,
   StatsOptions,
@@ -101,10 +102,24 @@ export class MemoryService {
     return this.ensureFreshSync(true);
   }
 
+  async syncDryProbe(): Promise<{ status: "ok"; filesScanned: number }> {
+    return this.importer.dryProbe();
+  }
+
   async search(options: SearchOptions): Promise<ObservationRecord[]> {
-    await this.ensureFreshSync(false);
-    const scoped = this.runScopedSearch(options);
-    return scoped.observations;
+    return this.searchInternal(options, true);
+  }
+
+  async probeSearch(options: SearchOptions): Promise<ObservationRecord[]> {
+    return this.searchInternal(options, false);
+  }
+
+  async searchWithSummary(options: SearchOptions): Promise<SearchResultBundle> {
+    return this.searchWithSummaryInternal(options, true);
+  }
+
+  async probeSearchWithSummary(options: SearchOptions): Promise<SearchResultBundle> {
+    return this.searchWithSummaryInternal(options, false);
   }
 
   async timeline(anchorId: number, options: TimelineOptions): Promise<ObservationRecord[]> {
@@ -146,13 +161,11 @@ export class MemoryService {
   }
 
   async sessions(options?: SessionListOptions): Promise<SessionSummary[]> {
-    await this.ensureFreshSync(false);
-    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
-    return this.repo.listSessions({
-      ...options,
-      cwd: workspace?.cwd,
-      workspaceId: workspace?.workspaceId,
-    });
+    return this.sessionsInternal(options, true);
+  }
+
+  async probeSessions(options?: SessionListOptions): Promise<SessionSummary[]> {
+    return this.sessionsInternal(options, false);
   }
 
   async saveMemory(input: SaveMemoryInput): Promise<number> {
@@ -224,48 +237,105 @@ export class MemoryService {
   }
 
   async listPreferences(options?: ListPreferencesOptions): Promise<PreferenceRecord[]> {
-    await this.ensureFreshSync(false);
-    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
-    const limit = options?.limit ?? 100;
-    const scoped = this.runScopedSearch({
-      cwd: workspace?.cwd,
-      type: "manual_note",
-      limit: Math.min(limit * 5, 500),
-      scopeMode: options?.scopeMode ?? "exact_workspace",
-    });
-    const rows = scoped.observations;
-
-    const all = rows
-      .map((row) => toPreferenceRecord(row))
-      .filter((row): row is PreferenceRecord => row !== null);
-
-    const filtered = all.filter((row) => {
-      if (options?.key && row.key !== options.key) return false;
-      if (options?.scope && row.scope !== options.scope) return false;
-      return true;
-    });
-
-    const supersededBy = buildSupersededMap(filtered);
-    const includeSuperseded = options?.includeSuperseded ?? false;
-    const activeOnly = includeSuperseded
-      ? filtered
-      : filtered.filter((row) => !supersededBy.has(row.id));
-
-    return activeOnly
-      .sort((a, b) => b.observationCreatedAtEpoch - a.observationCreatedAtEpoch)
-      .slice(0, limit);
+    return this.listPreferencesInternal(options, true);
   }
 
   async resolvePreferences(options?: ResolvePreferencesOptions): Promise<ResolvedPreference[]> {
+    return this.resolvePreferencesInternal(options, true);
+  }
+
+  async probeBuildContextPack(options?: BuildContextOptions): Promise<ContextPack> {
+    return this.buildContextPackInternal(options, false, {
+      probeMode: true,
+      noteLimit: 1,
+      durableMemoryLimit: 2,
+      observationLimit: 1,
+      sessionLimit: 1,
+      preferenceLimit: 1,
+      preferenceFetchFloor: 5,
+    });
+  }
+
+  async probeResolvePreferences(options?: ResolvePreferencesOptions): Promise<ResolvedPreference[]> {
+    return this.resolvePreferencesInternal(options, false);
+  }
+
+  async context(input: {
+    cwd?: string | undefined;
+    query?: string | undefined;
+    limit?: number | undefined;
+    type?: ObservationType | undefined;
+    scopeMode?: ScopeMode | undefined;
+  }): Promise<string> {
+    const pack = await this.buildContextPack({
+      cwd: input.cwd,
+      query: input.query,
+      limit: input.limit,
+      scopeMode: input.scopeMode,
+    });
+
+    if (input.type) {
+      const filtered = pack.highlights.filter((row) => row.type === input.type);
+      if (filtered.length === 0) return "# codex-mem context\n\nNo relevant memory found.";
+      return toMarkdown({
+        ...pack,
+        highlights: filtered,
+      });
+    }
+
+    return pack.markdown;
+  }
+
+  async buildContextPack(options?: BuildContextOptions): Promise<ContextPack> {
+    return this.buildContextPackInternal(options, true);
+  }
+
+  async runRetrievalBenchmark(cases: RetrievalBenchmarkCase[]): Promise<RetrievalBenchmarkResult[]> {
+    await this.ensureFreshSync(false);
+    const results: RetrievalBenchmarkResult[] = [];
+
+    for (const testCase of cases) {
+      const pack = await this.buildContextPack({
+        cwd: testCase.cwd,
+        query: testCase.query,
+        preferenceKeys: testCase.preferenceKeys,
+        limit: 8,
+        sessionLimit: 3,
+      });
+
+      results.push(
+        evaluateBenchmarkCase(testCase, {
+          highlights: pack.highlights,
+          durableMemories: pack.durableMemories,
+          resolvedPreferenceKeys: pack.resolvedPreferences.map((item) => item.key),
+          retrievalSummary: pack.retrievalSummary,
+        }),
+      );
+    }
+
+    return results;
+  }
+
+  private async resolvePreferencesInternal(
+    options: ResolvePreferencesOptions | undefined,
+    allowSync: boolean,
+    profile?: {
+      fetchFloor?: number;
+    },
+  ): Promise<ResolvedPreference[]> {
     const scopeMode = options?.scopeMode ?? "global";
     const outputLimit = options?.limit ?? 100;
-    const fetchLimit = Math.max(100, outputLimit);
-    const candidates = await this.listPreferences({
-      cwd: options?.cwd,
-      limit: fetchLimit,
-      includeSuperseded: true,
-      scopeMode,
-    });
+    const fetchFloor = profile?.fetchFloor ?? 100;
+    const fetchLimit = Math.max(fetchFloor, outputLimit);
+    const candidates = await this.listPreferencesInternal(
+      {
+        cwd: options?.cwd,
+        limit: fetchLimit,
+        includeSuperseded: true,
+        scopeMode,
+      },
+      allowSync,
+    );
 
     const supersededBy = buildSupersededMap(candidates);
     const active = candidates.filter((row) => !supersededBy.has(row.id));
@@ -299,39 +369,32 @@ export class MemoryService {
       .slice(0, outputLimit);
   }
 
-  async context(input: {
-    cwd?: string | undefined;
-    query?: string | undefined;
-    limit?: number | undefined;
-    type?: ObservationType | undefined;
-    scopeMode?: ScopeMode | undefined;
-  }): Promise<string> {
-    const pack = await this.buildContextPack({
-      cwd: input.cwd,
-      query: input.query,
-      limit: input.limit,
-      scopeMode: input.scopeMode,
-    });
-
-    if (input.type) {
-      const filtered = pack.highlights.filter((row) => row.type === input.type);
-      if (filtered.length === 0) return "# codex-mem context\n\nNo relevant memory found.";
-      return toMarkdown({
-        ...pack,
-        highlights: filtered,
-      });
+  private async buildContextPackInternal(
+    options: BuildContextOptions | undefined,
+    allowSync: boolean,
+    profile?: {
+      probeMode?: boolean;
+      noteLimit?: number;
+      durableMemoryLimit?: number;
+      observationLimit?: number;
+      sessionLimit?: number;
+      preferenceLimit?: number;
+      preferenceFetchFloor?: number;
+    },
+  ): Promise<ContextPack> {
+    if (allowSync) {
+      await this.ensureFreshSync(false);
     }
-
-    return pack.markdown;
-  }
-
-  async buildContextPack(options?: BuildContextOptions): Promise<ContextPack> {
     const scopeMode = options?.scopeMode ?? "exact_workspace";
     const workspace = this.resolveWorkspaceRequirement(options?.cwd, scopeMode);
     const cwd = workspace?.cwd;
     const query = options?.query;
     const limit = options?.limit ?? 8;
-    const sessionLimit = options?.sessionLimit ?? 5;
+    const sessionLimit = profile?.sessionLimit ?? options?.sessionLimit ?? 5;
+    const noteLimit = profile?.noteLimit ?? 5;
+    const durableMemoryLimit = profile?.durableMemoryLimit ?? 5;
+    const observationLimit = profile?.observationLimit ?? 3;
+    const preferenceLimit = profile?.preferenceLimit ?? options?.preferenceLimit ?? 5;
 
     const scopedSearch = this.runScopedSearch({
       cwd,
@@ -341,32 +404,36 @@ export class MemoryService {
     });
     const highlights = scopedSearch.observations;
 
-    const notes = await this.search({
+    const notes = await this.searchInternal({
       cwd,
       type: "manual_note",
-      limit: 5,
+      limit: noteLimit,
       scopeMode,
-    });
+    }, allowSync);
 
     const durableMemories = highlights
       .filter((row) => row.memoryClass && row.memoryStatus === "active")
-      .slice(0, 5);
+      .slice(0, durableMemoryLimit);
     const recentRelevantObservations = highlights
       .filter((row) => !row.memoryClass)
-      .slice(0, 3);
+      .slice(0, observationLimit);
 
-    const resolvedPreferences = await this.resolvePreferences({
+    const resolvedPreferences = await this.resolvePreferencesInternal({
       cwd,
       keys: options?.preferenceKeys,
-      limit: options?.preferenceLimit ?? 5,
+      limit: preferenceLimit,
       scopeMode,
-    });
+    }, allowSync, profile?.preferenceFetchFloor === undefined
+      ? undefined
+      : {
+          fetchFloor: profile.preferenceFetchFloor,
+        });
 
-    const sessions = await this.sessions({
+    const sessions = await this.sessionsInternal({
       cwd,
       limit: sessionLimit,
       scopeMode,
-    });
+    }, allowSync);
 
     const retrievalSummary = scopedSearch.retrievalSummary;
 
@@ -400,30 +467,76 @@ export class MemoryService {
     };
   }
 
-  async runRetrievalBenchmark(cases: RetrievalBenchmarkCase[]): Promise<RetrievalBenchmarkResult[]> {
-    await this.ensureFreshSync(false);
-    const results: RetrievalBenchmarkResult[] = [];
+  private async searchInternal(options: SearchOptions, allowSync: boolean): Promise<ObservationRecord[]> {
+    const bundle = await this.searchWithSummaryInternal(options, allowSync);
+    return bundle.observations;
+  }
 
-    for (const testCase of cases) {
-      const pack = await this.buildContextPack({
-        cwd: testCase.cwd,
-        query: testCase.query,
-        preferenceKeys: testCase.preferenceKeys,
-        limit: 8,
-        sessionLimit: 3,
-      });
-
-      results.push(
-        evaluateBenchmarkCase(testCase, {
-          highlights: pack.highlights,
-          durableMemories: pack.durableMemories,
-          resolvedPreferenceKeys: pack.resolvedPreferences.map((item) => item.key),
-          retrievalSummary: pack.retrievalSummary,
-        }),
-      );
+  private async searchWithSummaryInternal(
+    options: SearchOptions,
+    allowSync: boolean,
+  ): Promise<SearchResultBundle> {
+    if (allowSync) {
+      await this.ensureFreshSync(false);
     }
+    const scoped = this.runScopedSearch(options);
+    return {
+      observations: scoped.observations,
+      retrievalSummary: scoped.retrievalSummary,
+    };
+  }
 
-    return results;
+  private async sessionsInternal(
+    options: SessionListOptions | undefined,
+    allowSync: boolean,
+  ): Promise<SessionSummary[]> {
+    if (allowSync) {
+      await this.ensureFreshSync(false);
+    }
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
+    return this.repo.listSessions({
+      ...options,
+      cwd: workspace?.cwd,
+      workspaceId: workspace?.workspaceId,
+    });
+  }
+
+  private async listPreferencesInternal(
+    options: ListPreferencesOptions | undefined,
+    allowSync: boolean,
+  ): Promise<PreferenceRecord[]> {
+    if (allowSync) {
+      await this.ensureFreshSync(false);
+    }
+    const workspace = this.resolveWorkspaceRequirement(options?.cwd, options?.scopeMode ?? "global");
+    const limit = options?.limit ?? 100;
+    const scoped = this.runScopedSearch({
+      cwd: workspace?.cwd,
+      type: "manual_note",
+      limit: Math.min(limit * 5, 500),
+      scopeMode: options?.scopeMode ?? "exact_workspace",
+    });
+    const rows = scoped.observations;
+
+    const all = rows
+      .map((row) => toPreferenceRecord(row))
+      .filter((row): row is PreferenceRecord => row !== null);
+
+    const filtered = all.filter((row) => {
+      if (options?.key && row.key !== options.key) return false;
+      if (options?.scope && row.scope !== options.scope) return false;
+      return true;
+    });
+
+    const supersededBy = buildSupersededMap(filtered);
+    const includeSuperseded = options?.includeSuperseded ?? false;
+    const activeOnly = includeSuperseded
+      ? filtered
+      : filtered.filter((row) => !supersededBy.has(row.id));
+
+    return activeOnly
+      .sort((a, b) => b.observationCreatedAtEpoch - a.observationCreatedAtEpoch)
+      .slice(0, limit);
   }
 
   private runScopedSearch(options: SearchOptions): ScopedSearchResult {

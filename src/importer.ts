@@ -58,6 +58,20 @@ export class CodexImporter {
     };
   }
 
+  async dryProbe(): Promise<{ status: "ok"; filesScanned: number }> {
+    const files = collectSourceFiles(this.codexHome);
+    for (const filePath of files) {
+      if (!existsSync(filePath)) continue;
+      const stat = statSync(filePath);
+      const currentOffset = this.repo.getOffset(filePath);
+      normalizeOffset(stat.size, stat.mtimeMs, currentOffset);
+    }
+    return {
+      status: "ok",
+      filesScanned: files.length,
+    };
+  }
+
   async syncFile(filePath: string): Promise<number> {
     if (!existsSync(filePath)) return 0;
 

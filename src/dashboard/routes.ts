@@ -28,6 +28,7 @@ import {
 import { renderDashboardHtml } from "./template.js";
 import { MemoryService } from "../memory-service.js";
 import { inferProcessWorkspaceIdentity, ScopeIsolationError } from "../workspace-identity.js";
+import type { DatabaseHealthReport, SyncResult } from "../types.js";
 
 const VERSION = "0.1.0";
 const DASHBOARD_CLIENT_ENTRY =
@@ -37,9 +38,16 @@ const DASHBOARD_CLIENT_ENTRY =
 export async function routeDashboardRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  service: MemoryService,
+  service: MemoryService | null,
   host: string,
   events: DashboardEventHub,
+  healthState: {
+    dbHealth: DatabaseHealthReport;
+    lastIntegrityCheckAt: string;
+    lastHealthySnapshotAt?: string | undefined;
+    degradedReason?: string | undefined;
+    lastSync: SyncResult | null;
+  },
 ): Promise<void> {
   const method = req.method ?? "GET";
   const url = new URL(req.url ?? "/", `http://${host}`);
@@ -65,7 +73,12 @@ export async function routeDashboardRequest(
   }
 
   if (method === "GET" && url.pathname === "/api/health") {
-    await handleHealth(res, service, events);
+    handleHealth(res, healthState);
+    return;
+  }
+
+  if (service === null || !healthState.dbHealth.safeToStart) {
+    writeError(res, 503, "DB_DEGRADED", healthState.degradedReason ?? "Database is degraded.");
     return;
   }
 
@@ -127,18 +140,29 @@ export async function routeDashboardRequest(
   writeError(res, 404, "NOT_FOUND", "Route not found.");
 }
 
-async function handleHealth(
+function handleHealth(
   res: ServerResponse,
-  service: MemoryService,
-  events: DashboardEventHub,
-): Promise<void> {
-  const sync = await service.sync();
-  events.publishSync(sync);
-
+  healthState: {
+    dbHealth: DatabaseHealthReport;
+    lastIntegrityCheckAt: string;
+    lastHealthySnapshotAt?: string | undefined;
+    degradedReason?: string | undefined;
+    lastSync: SyncResult | null;
+  },
+): void {
   writeJson(res, 200, {
-    status: "ok",
+    status: healthState.dbHealth.safeToStart ? "ok" : "degraded",
     version: VERSION,
-    sync,
+    sync: healthState.lastSync,
+    dbHealth: healthState.dbHealth.dbHealth,
+    servicePathHealth: healthState.dbHealth.servicePathHealth,
+    runtimeContext: healthState.dbHealth.runtimeContext,
+    serviceStatus: healthState.dbHealth.status,
+    lastIntegrityCheckAt: healthState.lastIntegrityCheckAt,
+    lastQueryProbeAt: healthState.dbHealth.lastQueryProbeAt,
+    lastQueryProbeResults: healthState.dbHealth.lastQueryProbeResults,
+    lastHealthySnapshotAt: healthState.lastHealthySnapshotAt,
+    degradedReason: healthState.degradedReason,
     now: new Date().toISOString(),
   });
 }
@@ -146,18 +170,15 @@ async function handleHealth(
 async function handleSearch(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseSearchParams(url);
   const cwd = params.cwd ?? inferProcessWorkspaceIdentity().cwd;
-  const observations = await service.search({
+  const result = await service.searchWithSummary({
     ...params,
     cwd,
     scopeMode: params.scopeMode ?? "exact_workspace",
   });
-  const contextPack = await service.buildContextPack({
-    cwd,
-    query: params.query,
-    limit: params.limit,
-    scopeMode: params.scopeMode ?? "exact_workspace",
+  writeJson(res, 200, {
+    observations: result.observations,
+    retrievalSummary: result.retrievalSummary,
   });
-  writeJson(res, 200, { observations, retrievalSummary: contextPack.retrievalSummary });
 }
 
 async function handleTimeline(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
