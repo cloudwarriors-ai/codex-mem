@@ -70,6 +70,7 @@ Usage:
   codex-mem recover [--mode MODE] [--json]
   codex-mem dashboard [--host HOST] [--port PORT]
   codex-mem mcp-server
+  codex-mem mcp-sse-server [--host HOST] [--port PORT]
   codex-mem init-mcp [--name NAME]
 `;
 

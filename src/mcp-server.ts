@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   buildContextInputSchema,
   getObservationsInputSchema,
@@ -22,6 +23,115 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     version: "0.1.0",
   });
 
+  registerTools(server, service);
+  return server;
+}
+
+export async function runMcpServer(paths: MemoryPaths): Promise<void> {
+  const service = new MemoryService(paths);
+  const server = createMcpServer(service);
+
+  const transport = new StdioServerTransport();
+
+  let shuttingDown = false;
+
+  function gracefulShutdown(): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    void server.close().finally(() => {
+      service.close();
+      process.exit(0);
+    });
+  }
+
+  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", gracefulShutdown);
+  process.stdin.on("end", gracefulShutdown);
+
+  await server.connect(transport);
+}
+
+export async function runMcpSseServer(
+  paths: MemoryPaths,
+  options: { host?: string | undefined; port?: number | undefined } = {},
+): Promise<void> {
+  const { default: express } = await import("express");
+
+  const service = new MemoryService(paths);
+  const host = options.host ?? process.env.MCP_SSE_HOST ?? "0.0.0.0";
+  const port = options.port ?? parseInt(process.env.MCP_SSE_PORT ?? "8808", 10);
+
+  const { randomUUID } = await import("node:crypto");
+  const app = express();
+
+  app.use(express.json());
+
+  // Per-session transports
+  const sessions = new Map<string, StreamableHTTPServerTransport>();
+
+  app.all("/mcp", async (req, res) => {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    // Existing session — route to its transport
+    if (sessionId && sessions.has(sessionId)) {
+      const transport = sessions.get(sessionId)!;
+      await transport.handleRequest(req, res, req.body);
+      return;
+    }
+
+    // New session (initialize request) — create transport + server
+    if (req.method === "POST" && !sessionId) {
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        enableJsonResponse: true,
+      });
+
+      const mcpServer = createMcpServer(service);
+
+      transport.onclose = () => {
+        const sid = transport.sessionId;
+        if (sid) sessions.delete(sid);
+        void mcpServer.close();
+      };
+
+      await mcpServer.connect(transport as Parameters<typeof mcpServer.connect>[0]);
+      await transport.handleRequest(req, res, req.body);
+
+      const sid = transport.sessionId;
+      if (sid) sessions.set(sid, transport);
+      return;
+    }
+
+    // Unknown session
+    res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "Bad Request: No valid session" }, id: null });
+  });
+
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", sessions: sessions.size });
+  });
+
+  const httpServer = app.listen(port, host, () => {
+    process.stdout.write(`codex-mem MCP server listening on ${host}:${port}\n`);
+  });
+
+  let shuttingDown = false;
+
+  function gracefulShutdown(): void {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    const closing = [...sessions.values()].map((t) => t.close());
+    void Promise.all(closing).finally(() => {
+      httpServer.close();
+      service.close();
+      process.exit(0);
+    });
+  }
+
+  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", gracefulShutdown);
+}
+
+function registerTools(server: McpServer, service: MemoryService): void {
   server.registerTool(
     "search",
     {
