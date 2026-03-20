@@ -75,7 +75,7 @@ child.on("exit", (code) => {
     expect(result.status).toBe(0);
   }, 15000);
 
-  it("replaces an existing mcp-server for the same data dir", async () => {
+  it("allows concurrent mcp-server proxies for the same data dir without takeover", async () => {
     const home = createHome();
     const result = spawnSync(
       process.execPath,
@@ -83,51 +83,41 @@ child.on("exit", (code) => {
         "-e",
         `
 const { spawn } = require("node:child_process");
-const { existsSync, readFileSync } = require("node:fs");
-const { join } = require("node:path");
 const env = { ...process.env, HOME: ${JSON.stringify(home)} };
 const first = spawn(process.execPath, [${JSON.stringify(CLI_PATH)}, "mcp-server"], { stdio: ["pipe", "pipe", "pipe"], env });
 let second;
-const lockPath = join(${JSON.stringify(home)}, ".codex-mem", "runtime-locks", "mcp-server.json");
 const fail = (code, message) => {
   process.stderr.write(message + "\\n");
   try { first.kill("SIGKILL"); } catch {}
   try { second?.kill("SIGKILL"); } catch {}
   process.exit(code);
 };
-first.on("exit", (code) => {
-  clearTimeout(firstTimeout);
-  if (![0, 1].includes(code)) fail(3, "first mcp-server exited unexpectedly");
-  const lockDeadline = Date.now() + 6000;
-  const waitForLock = () => {
-    if (existsSync(lockPath)) {
-      const lock = JSON.parse(readFileSync(lockPath, "utf8"));
-      if (!second) fail(8, "replacement mcp-server missing");
-      if (lock.pid !== second.pid) fail(4, "replacement lock pid mismatch");
-      second.stdin.end();
-      const secondTimeout = setTimeout(() => fail(5, "replacement mcp-server did not exit"), 6000);
-      second.on("exit", (secondCode) => {
-        clearTimeout(secondTimeout);
-        process.exit([0, 1].includes(secondCode) ? 0 : 6);
-      });
-      return;
-    }
-    if (Date.now() >= lockDeadline) fail(7, "replacement lock did not appear");
-    setTimeout(waitForLock, 50);
-  };
-  waitForLock();
-});
-const startDeadline = Date.now() + 6000;
-const waitForFirstLock = () => {
-  if (existsSync(lockPath)) {
-    second = spawn(process.execPath, [${JSON.stringify(CLI_PATH)}, "mcp-server"], { stdio: ["pipe", "pipe", "pipe"], env });
-    return;
-  }
-  if (Date.now() >= startDeadline) fail(9, "first mcp-server never acquired the runtime lock");
-  setTimeout(waitForFirstLock, 50);
-};
-waitForFirstLock();
-const firstTimeout = setTimeout(() => fail(2, "first mcp-server did not exit"), 6000);
+const firstExit = () => fail(3, "first mcp-server exited unexpectedly");
+first.on("exit", firstExit);
+setTimeout(() => {
+  second = spawn(process.execPath, [${JSON.stringify(CLI_PATH)}, "mcp-server"], { stdio: ["pipe", "pipe", "pipe"], env });
+  second.on("exit", (code) => {
+    if (![0, 1].includes(code)) fail(4, "second mcp-server exited unexpectedly");
+  });
+  setTimeout(() => {
+    if (first.exitCode !== null) fail(5, "first mcp-server was taken over");
+    first.off("exit", firstExit);
+    first.stdin.end();
+    second.stdin.end();
+    const deadline = Date.now() + 6000;
+    const waitForBoth = () => {
+      const firstDone = first.exitCode !== null;
+      const secondDone = second.exitCode !== null;
+      if (firstDone && secondDone) {
+        process.exit([0, 1].includes(first.exitCode) && [0, 1].includes(second.exitCode) ? 0 : 6);
+        return;
+      }
+      if (Date.now() >= deadline) fail(7, "concurrent mcp-servers did not exit");
+      setTimeout(waitForBoth, 50);
+    };
+    waitForBoth();
+  }, 1000);
+}, 500);
         `,
       ],
       { encoding: "utf8", timeout: 18000 },

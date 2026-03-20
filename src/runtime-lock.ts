@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MemoryPaths } from "./types.js";
+import type { MemoryPaths, RuntimeSurface } from "./types.js";
 
 export interface RuntimeLock {
-  surface: string;
+  surface: RuntimeSurface | string;
   pid: number;
   ppid: number;
   createdAt: string;
@@ -33,7 +33,7 @@ function getLockPath(paths: MemoryPaths, surface: string): string {
 
 export function acquireRuntimeLock(
   paths: MemoryPaths,
-  surface: string,
+  surface: RuntimeSurface | string,
   options: RuntimeLockOptions = {},
 ): RuntimeLockHandle {
   mkdirSync(getLocksDir(paths), { recursive: true });
@@ -82,10 +82,10 @@ export function acquireRuntimeLock(
 
 export function listRuntimeLocks(paths: MemoryPaths): RuntimeLock[] {
   mkdirSync(getLocksDir(paths), { recursive: true });
-  const surfaces = ["worker", "dashboard", "mcp-server"];
   const locks: RuntimeLock[] = [];
-  for (const surface of surfaces) {
-    const path = getLockPath(paths, surface);
+  for (const entry of readdirSync(getLocksDir(paths))) {
+    if (!entry.endsWith(".json")) continue;
+    const path = join(getLocksDir(paths), entry);
     const payload = readRuntimeLock(path);
     if (payload) locks.push(payload);
   }

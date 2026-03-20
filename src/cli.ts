@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolvePaths } from "./config.js";
+import { isSharedDefaultDataDir, resolvePaths } from "./config.js";
 import {
   buildContextInputSchema,
   contextInputSchema,
@@ -29,6 +29,8 @@ import {
   repairDatabase,
   runServiceProbeCommand,
 } from "./db-lifecycle.js";
+import { DaemonClientError, ensureDaemon, invokeDaemonMethod, readDaemonHealth } from "./daemon-client.js";
+import { startCodexMemDaemon } from "./daemon-server.js";
 import { runMcpServer } from "./mcp-server.js";
 import { startDashboardServer } from "./dashboard-server.js";
 import { runWorker } from "./worker.js";
@@ -59,6 +61,9 @@ Usage:
   codex-mem worker [--interval-seconds N] [--run-once] [--json]
   codex-mem doctor [--json]
   codex-mem status [--json]
+  codex-mem daemon [--host HOST] [--port PORT] [--json]
+  codex-mem ensure-daemon [--json]
+  codex-mem daemon-status [--json]
   codex-mem snapshot-now [--json]
   codex-mem repair-db [--mode MODE] [--json]
   codex-mem rebuild-query-layer [--json]
@@ -78,9 +83,35 @@ export async function main(argv = process.argv): Promise<void> {
   }
 
   const paths = resolvePaths();
+  const useDaemon = shouldUseDaemonForCommand(command, paths);
 
   if (command === "mcp-server") {
     await runMcpServer(paths);
+    return;
+  }
+
+  if (command === "daemon") {
+    const host = parseStringFlag(parsed.flags.host);
+    const port = parseIntFlag(parsed.flags.port);
+    const daemon = await startCodexMemDaemon(paths, { host, port });
+    if (parsed.flags.json) {
+      print({ status: "running", daemon: daemon.metadata }, true);
+    } else {
+      process.stdout.write(`codex-mem daemon running at http://${daemon.metadata.host}:${daemon.metadata.port}\n`);
+    }
+    await new Promise<void>(() => {
+      // Hold the daemon process open until signaled.
+    });
+    return;
+  }
+
+  if (command === "ensure-daemon") {
+    print({ daemon: await ensureDaemon(paths) }, parsed.flags.json);
+    return;
+  }
+
+  if (command === "daemon-status") {
+    print({ daemon: await readDaemonHealth(paths) }, true);
     return;
   }
 
@@ -144,7 +175,7 @@ export async function main(argv = process.argv): Promise<void> {
   }
 
   if (command === "doctor" || command === "status") {
-    print({ health: await getStatusReport(paths) }, parsed.flags.json);
+    print({ health: await getStatusReport(paths), daemon: await readDaemonHealth(paths) }, parsed.flags.json);
     return;
   }
 
@@ -199,6 +230,12 @@ export async function main(argv = process.argv): Promise<void> {
     if (probeResult.status !== "ok") {
       process.exitCode = 2;
     }
+    return;
+  }
+
+  if (useDaemon) {
+    const result = await runDaemonCommand(command, parsed, paths);
+    emitDaemonCommandResult(command, result, parsed.flags.json);
     return;
   }
 
@@ -398,6 +435,195 @@ export async function main(argv = process.argv): Promise<void> {
   }
 }
 
+function shouldUseDaemonForCommand(command: string, paths: { dataDir: string }): boolean {
+  if (!isSharedDefaultDataDir(paths.dataDir)) return false;
+  return [
+    "sync",
+    "search",
+    "timeline",
+    "get",
+    "save",
+    "save-preference",
+    "list-preferences",
+    "resolve-preferences",
+    "context",
+    "stats",
+    "projects",
+    "sessions",
+    "build-context",
+  ].includes(command);
+}
+
+async function runDaemonCommand(
+  command: string,
+  parsed: ParsedArgs,
+  paths: ReturnType<typeof resolvePaths>,
+): Promise<unknown> {
+  switch (command) {
+    case "sync":
+      return invokeDaemonMethod(paths, "sync", {});
+    case "search":
+      return invokeDaemonMethod(
+        paths,
+        "search",
+        searchInputSchema.parse({
+          query: parsePositionalText(parsed.positionals),
+          limit: parseIntFlag(parsed.flags.limit),
+          offset: parseIntFlag(parsed.flags.offset),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          type: parseStringFlag(parsed.flags.type),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "timeline":
+      return invokeDaemonMethod(
+        paths,
+        "timeline",
+        timelineInputSchema.parse({
+          anchor: parseIntFlag(parsed.positionals[0]),
+          before: parseIntFlag(parsed.flags.before),
+          after: parseIntFlag(parsed.flags.after),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "get":
+      return invokeDaemonMethod(
+        paths,
+        "get_observations",
+        getObservationsInputSchema.parse({
+          ids: parsed.positionals.map((value) => parseInt(value, 10)),
+        }),
+      );
+    case "save":
+      return invokeDaemonMethod(
+        paths,
+        "save_memory",
+        saveMemoryInputSchema.parse({
+          text: parsePositionalText(parsed.positionals),
+          title: parseStringFlag(parsed.flags.title),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+        }),
+      );
+    case "save-preference":
+      return invokeDaemonMethod(
+        paths,
+        "save_preference",
+        savePreferenceInputSchema.parse({
+          schema_version: "pref-note.v1",
+          key: parseStringFlag(parsed.flags.key),
+          scope: parseStringFlag(parsed.flags.scope),
+          trigger: parseStringFlag(parsed.flags.trigger),
+          preferred: parseStringFlag(parsed.flags.preferred),
+          avoid: parseStringFlag(parsed.flags.avoid),
+          example_good: parseStringFlag(parsed.flags["example-good"]),
+          example_bad: parseStringFlag(parsed.flags["example-bad"]),
+          confidence: parseFloatFlag(parsed.flags.confidence),
+          source: parseStringFlag(parsed.flags.source),
+          supersedes: parseCsvFlag(parsed.flags.supersedes) ?? [],
+          created_at: parseStringFlag(parsed.flags["created-at"]),
+          cwd: parseStringFlag(parsed.flags.cwd),
+          title: parseStringFlag(parsed.flags.title),
+        }),
+      );
+    case "list-preferences":
+      return invokeDaemonMethod(
+        paths,
+        "list_preferences",
+        listPreferencesInputSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          key: parseStringFlag(parsed.flags.key),
+          scope: parseStringFlag(parsed.flags.scope),
+          limit: parseIntFlag(parsed.flags.limit),
+          include_superseded: parseBooleanFlag(parsed.flags["include-superseded"]),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "resolve-preferences":
+      return invokeDaemonMethod(
+        paths,
+        "resolve_preferences",
+        resolvePreferencesInputSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          keys: parseCsvFlag(parsed.flags.keys),
+          limit: parseIntFlag(parsed.flags.limit),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "context":
+      return invokeDaemonMethod(
+        paths,
+        "context",
+        contextInputSchema.parse({
+          query: parseStringFlag(parsed.flags.query),
+          limit: parseIntFlag(parsed.flags.limit),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          type: parseStringFlag(parsed.flags.type),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "stats":
+      return invokeDaemonMethod(
+        paths,
+        "stats",
+        statsParamsSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]) ?? "exact_workspace",
+        }),
+      );
+    case "projects":
+      return invokeDaemonMethod(
+        paths,
+        "projects",
+        projectListParamsSchema.parse({
+          limit: parseIntFlag(parsed.flags.limit),
+        }),
+      );
+    case "sessions":
+      return invokeDaemonMethod(
+        paths,
+        "sessions",
+        sessionListParamsSchema.parse({
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          limit: parseIntFlag(parsed.flags.limit),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]),
+        }),
+      );
+    case "build-context":
+      return invokeDaemonMethod(
+        paths,
+        "build_context",
+        buildContextInputSchema.parse({
+          query: parseStringFlag(parsed.flags.query),
+          cwd: parseStringFlag(parsed.flags.cwd) ?? process.cwd(),
+          limit: parseIntFlag(parsed.flags.limit),
+          sessionLimit: parseIntFlag(parsed.flags["session-limit"]),
+          preferenceKeys: parseCsvFlag(parsed.flags["preference-keys"]),
+          preferenceLimit: parseIntFlag(parsed.flags["preference-limit"]),
+          scopeMode: parseStringFlag(parsed.flags["scope-mode"]),
+        }),
+      );
+    default:
+      throw new Error(`Unknown daemon-routed command: ${command}`);
+  }
+}
+
+function emitDaemonCommandResult(
+  command: string,
+  result: any,
+  asJson: string | boolean | undefined,
+): void {
+  if (command === "context" && !asJson) {
+    process.stdout.write(`${result.context}\n`);
+    return;
+  }
+  if (command === "build-context" && !asJson) {
+    process.stdout.write(`${result.contextPack.markdown}\n`);
+    return;
+  }
+  print(result, asJson);
+}
+
 function parseArgs(argv: string[]): ParsedArgs {
   const args = argv.slice(2);
   const command = args[0] ?? "";
@@ -502,6 +728,24 @@ function runInitMcp(nameFlag: string | boolean | undefined): void {
 
 if (isDirectCliInvocation(import.meta.url, process.argv[1])) {
   void main().catch((error: unknown) => {
+    if (error instanceof DaemonClientError) {
+      process.stderr.write(
+        `${JSON.stringify(
+          {
+            error: {
+              code: error.code,
+              message: error.message,
+              status: error.status,
+              details: error.payload,
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      process.exit(error.status >= 500 ? 2 : 1);
+      return;
+    }
     if (error instanceof DatabaseHealthError) {
       process.stderr.write(
         `${JSON.stringify({ error: { code: "DB_HEALTH_ERROR", message: error.message }, health: error.report }, null, 2)}\n`,

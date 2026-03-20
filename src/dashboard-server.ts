@@ -1,4 +1,5 @@
 import http from "node:http";
+import { isSharedDefaultDataDir } from "./config.js";
 import { acquireRuntimeLock } from "./runtime-lock.js";
 import { bootstrapRuntime, ensureHealthySnapshot, inspectRuntimeHealth } from "./db-lifecycle.js";
 import type { MemoryPaths } from "./types.js";
@@ -21,6 +22,11 @@ export async function startDashboardServer(
   paths: MemoryPaths,
   options?: { host?: string | undefined; port?: number | undefined },
 ): Promise<DashboardServer> {
+  if (isSharedDefaultDataDir(paths.dataDir)) {
+    throw new Error(
+      "dashboard cannot open the shared Codex memory store directly; use daemon-backed CLI/MCP or migrate dashboard proxy support first",
+    );
+  }
   const host = options?.host ?? process.env.CODEX_MEM_DASHBOARD_HOST ?? DEFAULT_HOST;
   const port = sanitizePort(options?.port ?? Number(process.env.CODEX_MEM_DASHBOARD_PORT ?? DEFAULT_PORT));
   const runtime = await bootstrapRuntime(paths, "dashboard", { allowDegraded: true });

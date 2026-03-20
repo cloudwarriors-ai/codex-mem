@@ -1,10 +1,10 @@
 import Database from "better-sqlite3";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, relative, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MemoryService } from "./memory-service.js";
-import { listRuntimeLocks } from "./runtime-lock.js";
+import { acquireRuntimeLock, listRuntimeLocks } from "./runtime-lock.js";
 import { CURRENT_SCHEMA_VERSION, configurePragmas } from "./db-pragmas.js";
 import type {
   DatabaseHealthReport,
@@ -21,6 +21,7 @@ import type {
   SnapshotMetadata,
 } from "./types.js";
 import { initializeRepositorySchema } from "./repository/schema.js";
+
 const SNAPSHOT_MIN_INTERVAL_MS = 15 * 60 * 1000;
 const SNAPSHOT_KEEP_RECENT = 8;
 const SNAPSHOT_KEEP_DAILY = 14;
@@ -61,8 +62,8 @@ export async function bootstrapRuntime(
   }
 
   const service = new MemoryService(paths);
-  if (!process.env.CODEX_MEM_SKIP_PRESTART_SNAPSHOT) {
-    await ensureHealthySnapshot(paths, service, "prestart");
+  if (surface === "daemon" && !process.env.CODEX_MEM_SKIP_PRESTART_SNAPSHOT) {
+    await ensureHealthySnapshot(paths, service, "daemon-prestart");
   }
   const health = await inspectRuntimeHealth(paths, surface, {
     skipServicePathPreflight: options?.skipServicePathPreflight,
@@ -115,7 +116,9 @@ export async function inspectRuntimeHealth(
   );
 
   const servicePathHealth = summarizeServicePathHealth(probeResults);
-  const safeToStart = dbHealth.safeToStart && servicePathHealth === "service_ok";
+  const servicePathAllowsStart =
+    servicePathHealth === "service_ok" || servicePathHealth === "service_probe_skipped";
+  const safeToStart = dbHealth.safeToStart && servicePathAllowsStart;
   const degradedReason =
     servicePathHealth === "service_ok"
       ? dbHealth.degradedReason
@@ -283,6 +286,7 @@ export async function createSnapshot(paths: MemoryPaths, reason: string): Promis
   const metadata: SnapshotMetadata = {
     id: basename(snapshotPath),
     path: snapshotPath,
+    relativePath: relative(getBackupsDir(paths), snapshotPath),
     createdAt: new Date().toISOString(),
     reason,
     status: report.safeToStart ? "healthy" : "failed_preflight",
@@ -296,213 +300,142 @@ export async function createSnapshot(paths: MemoryPaths, reason: string): Promis
 }
 
 export function repairDatabase(paths: MemoryPaths): DatabaseRepairReport {
-  const locks = listRuntimeLocks(paths);
-  if (locks.length > 0) {
-    return {
-      status: "blocked",
-      sourcePath: paths.dbPath,
-      incidentDir: "",
-      checkedAt: new Date().toISOString(),
-      schemaVersion: 0,
-      observationCount: 0,
-      durableMemoryCount: 0,
-      sourceOffsetCount: 0,
-      validationStatus: "db_unreadable",
-      validationMessage: `active runtime locks: ${locks.map((lock) => lock.surface).join(", ")}`,
-    };
+  const blocked = blockedByRuntimeOwnership(paths);
+  if (blocked) {
+    return blocked;
   }
 
-  mkdirSync(getBackupsDir(paths), { recursive: true });
-  const timestamp = new Date().toISOString().replaceAll(":", "").replaceAll(".", "");
-  const incidentDir = join(getBackupsDir(paths), `incident-${timestamp}`);
-  mkdirSync(incidentDir, { recursive: true });
-
-  const liveDb = paths.dbPath;
-  const liveWal = `${liveDb}-wal`;
-  const liveShm = `${liveDb}-shm`;
-  if (existsSync(liveDb)) copyFileSync(liveDb, join(incidentDir, "codex-mem.db.corrupt.original"));
-  if (existsSync(liveWal)) copyFileSync(liveWal, join(incidentDir, "codex-mem.db-wal.corrupt.original"));
-  if (existsSync(liveShm)) copyFileSync(liveShm, join(incidentDir, "codex-mem.db-shm.corrupt.original"));
-
-  const repairedPath = join(incidentDir, "codex-mem.repaired.db");
-  rmSync(repairedPath, { force: true });
-
-  const target = new Database(repairedPath);
+  const maintenanceLock = acquireRuntimeLock(paths, "maintenance");
   try {
-    configurePragmas(target);
-    initializeRepositorySchema(target);
-    target.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
-    target.pragma("foreign_keys = OFF");
-    target.exec(`ATTACH DATABASE '${escapeSqlitePath(liveDb)}' AS old`);
-    target.exec(`
-      INSERT INTO observations (
-        id, source, session_id, cwd, workspace_root, workspace_id, visibility, sensitivity,
-        scope_policy, role, type, title, text, metadata_json, created_at, created_at_epoch
-      )
-      SELECT
-        id, source, session_id, cwd, workspace_root, workspace_id, visibility, sensitivity,
-        scope_policy, role, type, title, text, metadata_json, created_at, created_at_epoch
-      FROM old.observations
-      ORDER BY id;
-    `);
-    target.exec(`
-      INSERT INTO source_offsets (source_path, last_offset, last_mtime_ms)
-      SELECT source_path, last_offset, last_mtime_ms
-      FROM old.source_offsets;
-    `);
-    target.exec(`
-      INSERT INTO durable_memories (
-        id, observation_id, memory_class, title, body, cwd, workspace_root, workspace_id,
-        visibility, sensitivity, scope_policy, trust_level, scope, source_kind, supersedes_json,
-        related_paths_json, related_topics_json, status, created_at, updated_at
-      )
-      SELECT
-        id, observation_id, memory_class, title, body, cwd, workspace_root, workspace_id,
-        visibility, sensitivity, scope_policy, trust_level, scope, source_kind, supersedes_json,
-        related_paths_json, related_topics_json, status, created_at, updated_at
-      FROM old.durable_memories
-      ORDER BY id;
-    `);
-    target.exec("DETACH DATABASE old");
-    target.exec(`INSERT INTO observations_fts(observations_fts) VALUES('rebuild')`);
-    target.pragma("foreign_keys = ON");
-  } finally {
-    target.close();
-  }
+    const incidentDir = createIncidentBundle(paths, "repair");
+    const liveDb = paths.dbPath;
+    const repairedPath = join(incidentDir, "codex-mem.repaired.db");
+    rmSync(repairedPath, { force: true });
 
-  const validation = inspectPath(repairedPath);
-  const rowCounts = readRowCounts(repairedPath);
-  const report: DatabaseRepairReport = {
-    status: validation.safeToStart ? "repaired" : "failed",
-    sourcePath: liveDb,
-    repairedPath,
-    incidentDir,
-    checkedAt: new Date().toISOString(),
-    schemaVersion: validation.schemaVersion,
-    observationCount: rowCounts.observationCount,
-    durableMemoryCount: rowCounts.durableMemoryCount,
-    sourceOffsetCount: rowCounts.sourceOffsetCount,
-    validationStatus: validation.dbHealth,
-    validationMessage: validation.quickCheck ?? validation.degradedReason ?? validation.status,
-  };
+    const target = new Database(repairedPath);
+    try {
+      configurePragmas(target);
+      initializeRepositorySchema(target);
+      target.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`);
+      target.pragma("foreign_keys = OFF");
+      target.exec(`ATTACH DATABASE '${escapeSqlitePath(liveDb)}' AS old`);
+      target.exec(`
+        INSERT INTO observations (
+          id, source, session_id, cwd, workspace_root, workspace_id, visibility, sensitivity,
+          scope_policy, role, type, title, text, metadata_json, created_at, created_at_epoch
+        )
+        SELECT
+          id, source, session_id, cwd, workspace_root, workspace_id, visibility, sensitivity,
+          scope_policy, role, type, title, text, metadata_json, created_at, created_at_epoch
+        FROM old.observations
+        ORDER BY id;
+      `);
+      target.exec(`
+        INSERT INTO source_offsets (source_path, last_offset, last_mtime_ms)
+        SELECT source_path, last_offset, last_mtime_ms
+        FROM old.source_offsets;
+      `);
+      target.exec(`
+        INSERT INTO durable_memories (
+          id, observation_id, memory_class, title, body, cwd, workspace_root, workspace_id,
+          visibility, sensitivity, scope_policy, trust_level, scope, source_kind, supersedes_json,
+          related_paths_json, related_topics_json, status, created_at, updated_at
+        )
+        SELECT
+          id, observation_id, memory_class, title, body, cwd, workspace_root, workspace_id,
+          visibility, sensitivity, scope_policy, trust_level, scope, source_kind, supersedes_json,
+          related_paths_json, related_topics_json, status, created_at, updated_at
+        FROM old.durable_memories
+        ORDER BY id;
+      `);
+      target.exec("DETACH DATABASE old");
+      target.exec(`INSERT INTO observations_fts(observations_fts) VALUES('rebuild')`);
+      target.pragma("foreign_keys = ON");
+    } finally {
+      target.close();
+    }
 
-  writeFileSync(join(incidentDir, "repair-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-
-  if (!validation.safeToStart) {
+    const report = promoteRecoveredDatabase(paths, repairedPath, incidentDir, "repair-db");
+    writeFileSync(join(incidentDir, "repair-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
     return report;
+  } finally {
+    maintenanceLock.release();
   }
-
-  const previousDir = join(incidentDir, "pre-swap");
-  mkdirSync(previousDir, { recursive: true });
-  if (existsSync(liveDb)) rmSync(join(previousDir, "codex-mem.db.pre-swap"), { force: true });
-  if (existsSync(liveDb)) copyFileSync(liveDb, join(previousDir, "codex-mem.db.pre-swap"));
-  if (existsSync(liveWal)) copyFileSync(liveWal, join(previousDir, "codex-mem.db-wal.pre-swap"));
-  if (existsSync(liveShm)) copyFileSync(liveShm, join(previousDir, "codex-mem.db-shm.pre-swap"));
-
-  rmSync(liveWal, { force: true });
-  rmSync(liveShm, { force: true });
-  copyFileSync(repairedPath, liveDb);
-
-  const recoverySnapshot = {
-    id: basename(repairedPath),
-    path: repairedPath,
-    createdAt: report.checkedAt,
-    reason: "repair-db",
-    status: "recovery_source" as const,
-    schemaVersion: report.schemaVersion,
-    observationCount: report.observationCount,
-    durableMemoryCount: report.durableMemoryCount,
-    sourceOffsetCount: report.sourceOffsetCount,
-  };
-  appendSnapshotMetadata(paths, recoverySnapshot);
-  return report;
 }
 
 export async function rebuildQueryLayer(paths: MemoryPaths): Promise<DatabaseRepairReport> {
-  const locks = listRuntimeLocks(paths);
-  if (locks.length > 0) {
-    return {
-      status: "blocked",
-      sourcePath: paths.dbPath,
-      incidentDir: "",
-      checkedAt: new Date().toISOString(),
-      schemaVersion: 0,
-      observationCount: 0,
-      durableMemoryCount: 0,
-      sourceOffsetCount: 0,
-      validationStatus: "db_unreadable",
-      validationMessage: `active runtime locks: ${locks.map((lock) => lock.surface).join(", ")}`,
-    };
+  const blocked = blockedByRuntimeOwnership(paths);
+  if (blocked) {
+    return blocked;
   }
 
-  mkdirSync(getBackupsDir(paths), { recursive: true });
-  const timestamp = new Date().toISOString().replaceAll(":", "").replaceAll(".", "");
-  const incidentDir = join(getBackupsDir(paths), `query-rebuild-${timestamp}`);
-  mkdirSync(incidentDir, { recursive: true });
-  const liveDb = paths.dbPath;
-  const liveWal = `${liveDb}-wal`;
-  const liveShm = `${liveDb}-shm`;
-  if (existsSync(liveDb)) copyFileSync(liveDb, join(incidentDir, "codex-mem.db.pre-rebuild"));
-  if (existsSync(liveWal)) copyFileSync(liveWal, join(incidentDir, "codex-mem.db-wal.pre-rebuild"));
-  if (existsSync(liveShm)) copyFileSync(liveShm, join(incidentDir, "codex-mem.db-shm.pre-rebuild"));
-
-  let db: Database.Database | null = null;
+  const maintenanceLock = acquireRuntimeLock(paths, "maintenance");
   try {
-    db = new Database(liveDb, { fileMustExist: true });
-    configurePragmas(db);
-    initializeRepositorySchema(db);
-    db.exec(`INSERT INTO observations_fts(observations_fts) VALUES('rebuild')`);
-    db.exec("REINDEX");
-    db.exec("ANALYZE");
-  } catch (error) {
-    db?.close();
-    return {
-      status: "failed",
+    const incidentDir = createIncidentBundle(paths, "query-rebuild");
+    const liveDb = paths.dbPath;
+
+    let db: Database.Database | null = null;
+    try {
+      db = new Database(liveDb, { fileMustExist: true });
+      configurePragmas(db);
+      initializeRepositorySchema(db);
+      db.exec(`INSERT INTO observations_fts(observations_fts) VALUES('rebuild')`);
+      db.exec("REINDEX");
+      db.exec("ANALYZE");
+    } catch (error) {
+      db?.close();
+      return {
+        status: "failed",
+        sourcePath: paths.dbPath,
+        incidentDir,
+        checkedAt: new Date().toISOString(),
+        schemaVersion: 0,
+        observationCount: 0,
+        durableMemoryCount: 0,
+        sourceOffsetCount: 0,
+        validationStatus: "db_unreadable",
+        validationMessage: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      db?.close();
+    }
+
+    const health = await inspectRuntimeHealth(paths, "maintenance");
+    const rowCounts = readRowCounts(paths.dbPath);
+    const report: DatabaseRepairReport = {
+      status: health.safeToStart ? "repaired" : "failed",
       sourcePath: paths.dbPath,
       incidentDir,
       checkedAt: new Date().toISOString(),
-      schemaVersion: 0,
-      observationCount: 0,
-      durableMemoryCount: 0,
-      sourceOffsetCount: 0,
-      validationStatus: "db_unreadable",
-      validationMessage: error instanceof Error ? error.message : String(error),
+      schemaVersion: health.schemaVersion,
+      observationCount: rowCounts.observationCount,
+      durableMemoryCount: rowCounts.durableMemoryCount,
+      sourceOffsetCount: rowCounts.sourceOffsetCount,
+      validationStatus: health.dbHealth,
+      validationMessage: health.degradedReason ?? health.status,
     };
+    writeFileSync(join(incidentDir, "rebuild-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    return report;
   } finally {
-    db?.close();
+    maintenanceLock.release();
   }
-
-  const health = await inspectRuntimeHealth(paths, "cli");
-  const rowCounts = readRowCounts(paths.dbPath);
-  const report: DatabaseRepairReport = {
-    status: health.safeToStart ? "repaired" : "failed",
-    sourcePath: paths.dbPath,
-    incidentDir,
-    checkedAt: new Date().toISOString(),
-    schemaVersion: health.schemaVersion,
-    observationCount: rowCounts.observationCount,
-    durableMemoryCount: rowCounts.durableMemoryCount,
-    sourceOffsetCount: rowCounts.sourceOffsetCount,
-    validationStatus: health.dbHealth,
-    validationMessage: health.degradedReason ?? health.status,
-  };
-  writeFileSync(join(incidentDir, "rebuild-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
-  return report;
 }
 
 export async function recoverDatabase(
   paths: MemoryPaths,
   mode: "auto" | "db" | "service-path" = "auto",
 ): Promise<{ modeUsed: "db" | "service-path"; report: DatabaseRepairReport; health: DatabaseHealthReport }> {
-  const health = await inspectRuntimeHealth(paths, "cli");
+  const health = await inspectRuntimeHealth(paths, "maintenance");
   if (mode === "db") {
-    return { modeUsed: "db", report: repairDatabase(paths), health };
+    const restored = await restoreLatestHealthySnapshot(paths);
+    return { modeUsed: "db", report: restored ?? repairDatabase(paths), health };
   }
   if (mode === "service-path") {
     return { modeUsed: "service-path", report: await rebuildQueryLayer(paths), health };
   }
   if (health.dbHealth !== "ok" && health.dbHealth !== "db_missing") {
-    return { modeUsed: "db", report: repairDatabase(paths), health };
+    const restored = await restoreLatestHealthySnapshot(paths);
+    return { modeUsed: "db", report: restored ?? repairDatabase(paths), health };
   }
   return {
     modeUsed: "service-path",
@@ -519,7 +452,13 @@ export function getSnapshotManifest(paths: MemoryPaths): SnapshotManifest {
   const path = getSnapshotManifestPath(paths);
   try {
     const parsed = JSON.parse(readFileSync(path, "utf8")) as SnapshotManifest;
-    if (Array.isArray(parsed.snapshots)) return parsed;
+    if (Array.isArray(parsed.snapshots)) {
+      const healed = healSnapshotManifest(paths, parsed);
+      if (JSON.stringify(healed) !== JSON.stringify(parsed)) {
+        writeSnapshotManifest(paths, healed);
+      }
+      return healed;
+    }
   } catch {
     // ignore
   }
@@ -543,7 +482,7 @@ function pruneSnapshots(paths: MemoryPaths): void {
   const snapshots = [...manifest.snapshots].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
   for (const snapshot of snapshots.slice(0, SNAPSHOT_KEEP_RECENT)) {
-    keep.add(snapshot.path);
+    keep.add(resolveSnapshotPath(paths, snapshot));
   }
 
   const daily = new Map<string, SnapshotMetadata>();
@@ -555,13 +494,14 @@ function pruneSnapshots(paths: MemoryPaths): void {
     if (daily.size >= SNAPSHOT_KEEP_DAILY) break;
   }
   for (const snapshot of daily.values()) {
-    keep.add(snapshot.path);
+    keep.add(resolveSnapshotPath(paths, snapshot));
   }
 
-  const nextSnapshots = manifest.snapshots.filter((snapshot) => keep.has(snapshot.path));
+  const nextSnapshots = manifest.snapshots.filter((snapshot) => keep.has(resolveSnapshotPath(paths, snapshot)));
   for (const snapshot of manifest.snapshots) {
-    if (keep.has(snapshot.path)) continue;
-    rmSync(snapshot.path, { force: true });
+    const snapshotPath = resolveSnapshotPath(paths, snapshot);
+    if (keep.has(snapshotPath)) continue;
+    rmSync(snapshotPath, { force: true });
   }
   writeSnapshotManifest(paths, { snapshots: nextSnapshots });
 }
@@ -753,11 +693,15 @@ function combineOverallStatus(
 function serviceProbeNamesForSurface(surface: RuntimeSurface): ServiceProbeName[] {
   switch (surface) {
     case "worker":
+    case "daemon":
       return ["query_smoke_search", "query_smoke_context", "query_smoke_sessions", "sync_dry_probe"];
     case "dashboard":
     case "mcp-server":
     case "cli":
       return ["query_smoke_search", "query_smoke_context", "query_smoke_sessions"];
+    case "maintenance":
+    case "daemon-start":
+      return [];
   }
 }
 
@@ -841,8 +785,206 @@ function getBackupsDir(paths: MemoryPaths): string {
   return join(paths.dataDir, "backups");
 }
 
+function getIncidentsDir(paths: MemoryPaths): string {
+  return join(paths.dataDir, "incidents");
+}
+
 function getSnapshotManifestPath(paths: MemoryPaths): string {
   return join(getBackupsDir(paths), "manifest.json");
+}
+
+function blockedByRuntimeOwnership(paths: MemoryPaths): DatabaseRepairReport | null {
+  const activeLocks = listRuntimeLocks(paths).filter(
+    (lock) => !["maintenance", "daemon-start"].includes(lock.surface),
+  );
+  if (activeLocks.length === 0) return null;
+  return {
+    status: "blocked",
+    sourcePath: paths.dbPath,
+    incidentDir: "",
+    checkedAt: new Date().toISOString(),
+    schemaVersion: 0,
+    observationCount: 0,
+    durableMemoryCount: 0,
+    sourceOffsetCount: 0,
+    validationStatus: "db_unreadable",
+    validationMessage: `active runtime locks: ${activeLocks.map((lock) => lock.surface).join(", ")}`,
+  };
+}
+
+function createIncidentBundle(paths: MemoryPaths, prefix: string): string {
+  mkdirSync(getIncidentsDir(paths), { recursive: true });
+  const timestamp = new Date().toISOString().replaceAll(":", "").replaceAll(".", "");
+  const incidentDir = join(getIncidentsDir(paths), `${prefix}-${timestamp}`);
+  mkdirSync(incidentDir, { recursive: true });
+
+  const liveDb = paths.dbPath;
+  const liveWal = `${liveDb}-wal`;
+  const liveShm = `${liveDb}-shm`;
+  if (existsSync(liveDb)) copyFileSync(liveDb, join(incidentDir, "codex-mem.db.original"));
+  if (existsSync(liveWal)) copyFileSync(liveWal, join(incidentDir, "codex-mem.db-wal.original"));
+  if (existsSync(liveShm)) copyFileSync(liveShm, join(incidentDir, "codex-mem.db-shm.original"));
+
+  const status = inspectDatabase(paths);
+  writeFileSync(join(incidentDir, "status-report.json"), `${JSON.stringify(status, null, 2)}\n`, "utf8");
+  writeFileSync(
+    join(incidentDir, "runtime-locks.json"),
+    `${JSON.stringify({ locks: listRuntimeLocks(paths) }, null, 2)}\n`,
+    "utf8",
+  );
+  const quickCheck = spawnSync("sqlite3", [paths.dbPath, "PRAGMA quick_check;"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  writeFileSync(
+    join(incidentDir, "sqlite-quick-check.json"),
+    `${JSON.stringify(
+      {
+        status: quickCheck.status,
+        signal: quickCheck.signal,
+        stdout: quickCheck.stdout,
+        stderr: quickCheck.stderr,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  const processes = spawnSync("ps", ["-axo", "pid,ppid,command"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  writeFileSync(join(incidentDir, "processes.txt"), processes.stdout || processes.stderr || "", "utf8");
+  return incidentDir;
+}
+
+function promoteRecoveredDatabase(
+  paths: MemoryPaths,
+  sourcePath: string,
+  incidentDir: string,
+  reason: string,
+): DatabaseRepairReport {
+  const validation = inspectPath(sourcePath);
+  const rowCounts = readRowCounts(sourcePath);
+  const report: DatabaseRepairReport = {
+    status: validation.safeToStart ? "repaired" : "failed",
+    sourcePath: paths.dbPath,
+    repairedPath: sourcePath,
+    incidentDir,
+    checkedAt: new Date().toISOString(),
+    schemaVersion: validation.schemaVersion,
+    observationCount: rowCounts.observationCount,
+    durableMemoryCount: rowCounts.durableMemoryCount,
+    sourceOffsetCount: rowCounts.sourceOffsetCount,
+    validationStatus: validation.dbHealth,
+    validationMessage: validation.quickCheck ?? validation.degradedReason ?? validation.status,
+  };
+
+  if (!validation.safeToStart) return report;
+
+  const liveDb = paths.dbPath;
+  const liveWal = `${liveDb}-wal`;
+  const liveShm = `${liveDb}-shm`;
+  const previousDir = join(incidentDir, "pre-swap");
+  mkdirSync(previousDir, { recursive: true });
+  if (existsSync(liveDb)) copyFileSync(liveDb, join(previousDir, "codex-mem.db.pre-swap"));
+  if (existsSync(liveWal)) copyFileSync(liveWal, join(previousDir, "codex-mem.db-wal.pre-swap"));
+  if (existsSync(liveShm)) copyFileSync(liveShm, join(previousDir, "codex-mem.db-shm.pre-swap"));
+
+  rmSync(liveWal, { force: true });
+  rmSync(liveShm, { force: true });
+  copyFileSync(sourcePath, liveDb);
+
+  const recoverySnapshot: SnapshotMetadata = {
+    id: basename(sourcePath),
+    path: sourcePath,
+    relativePath: relative(getBackupsDir(paths), sourcePath),
+    createdAt: report.checkedAt,
+    reason,
+    status: "recovery_source",
+    schemaVersion: report.schemaVersion,
+    observationCount: report.observationCount,
+    durableMemoryCount: report.durableMemoryCount,
+    sourceOffsetCount: report.sourceOffsetCount,
+  };
+  appendSnapshotMetadata(paths, recoverySnapshot);
+  return report;
+}
+
+async function restoreLatestHealthySnapshot(paths: MemoryPaths): Promise<DatabaseRepairReport | null> {
+  const blocked = blockedByRuntimeOwnership(paths);
+  if (blocked) {
+    return blocked;
+  }
+  const manifest = getSnapshotManifest(paths);
+  const candidate = [...manifest.snapshots]
+    .reverse()
+    .find((snapshot) => snapshot.status === "healthy" || snapshot.status === "recovery_source");
+  if (!candidate) return null;
+
+  const snapshotPath = resolveSnapshotPath(paths, candidate);
+  if (!existsSync(snapshotPath)) return null;
+
+  const maintenanceLock = acquireRuntimeLock(paths, "maintenance");
+  try {
+    const incidentDir = createIncidentBundle(paths, "restore");
+    const validation = inspectPath(snapshotPath);
+    if (!validation.safeToStart) {
+      const report: DatabaseRepairReport = {
+        status: "failed",
+        sourcePath: paths.dbPath,
+        repairedPath: snapshotPath,
+        incidentDir,
+        checkedAt: new Date().toISOString(),
+        schemaVersion: validation.schemaVersion,
+        observationCount: 0,
+        durableMemoryCount: 0,
+        sourceOffsetCount: 0,
+        validationStatus: validation.dbHealth,
+        validationMessage: validation.quickCheck ?? validation.degradedReason ?? validation.status,
+      };
+      writeFileSync(join(incidentDir, "restore-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+      return report;
+    }
+
+    const report = promoteRecoveredDatabase(paths, snapshotPath, incidentDir, "restore-latest-healthy");
+    if (report.status === "repaired") {
+      const rebuild = await rebuildQueryLayer(paths);
+      writeFileSync(join(incidentDir, "restore-report.json"), `${JSON.stringify({ report, rebuild }, null, 2)}\n`, "utf8");
+    } else {
+      writeFileSync(join(incidentDir, "restore-report.json"), `${JSON.stringify(report, null, 2)}\n`, "utf8");
+    }
+    return report;
+  } finally {
+    maintenanceLock.release();
+  }
+}
+
+function healSnapshotManifest(paths: MemoryPaths, manifest: SnapshotManifest): SnapshotManifest {
+  return {
+    snapshots: manifest.snapshots.map((snapshot) => {
+      const resolved = resolveSnapshotPath(paths, snapshot);
+      return {
+        ...snapshot,
+        path: resolved,
+        relativePath: relative(getBackupsDir(paths), resolved),
+      };
+    }),
+  };
+}
+
+function resolveSnapshotPath(paths: MemoryPaths, snapshot: SnapshotMetadata): string {
+  if (snapshot.relativePath) {
+    return resolvePath(getBackupsDir(paths), snapshot.relativePath);
+  }
+  const candidateById = resolvePath(getBackupsDir(paths), snapshot.id);
+  if (existsSync(candidateById)) return candidateById;
+  if (snapshot.path) {
+    const candidateByBasename = resolvePath(getBackupsDir(paths), basename(snapshot.path));
+    if (existsSync(candidateByBasename)) return candidateByBasename;
+    return resolvePath(snapshot.path);
+  }
+  return candidateById;
 }
 
 function escapeSqlitePath(path: string): string {

@@ -268,7 +268,14 @@ export type ServicePathHealthStatus =
 
 export type RuntimeContext = "host" | "docker";
 
-export type RuntimeSurface = "worker" | "dashboard" | "mcp-server" | "cli";
+export type RuntimeSurface =
+  | "worker"
+  | "dashboard"
+  | "mcp-server"
+  | "cli"
+  | "daemon"
+  | "maintenance"
+  | "daemon-start";
 
 export interface ServiceProbeResult {
   probe: ServiceProbeName;
@@ -295,6 +302,7 @@ export interface DatabasePragmas {
 export interface SnapshotMetadata {
   id: string;
   path: string;
+  relativePath?: string | undefined;
   createdAt: string;
   reason: string;
   status: "healthy" | "recovery_source" | "failed_preflight";
@@ -344,6 +352,23 @@ export interface MemoryPaths {
   codexHome: string;
   dataDir: string;
   dbPath: string;
+}
+
+export interface DaemonRuntimeMetadata {
+  pid: number;
+  port: number;
+  host: string;
+  tokenPath: string;
+  startedAt: string;
+  dbGeneration: string;
+  dbPath: string;
+}
+
+export interface DaemonHealthReport {
+  daemonState: "running" | "unavailable" | "degraded";
+  metadata?: DaemonRuntimeMetadata | undefined;
+  errorCode?: string | undefined;
+  errorMessage?: string | undefined;
 }
 
 export interface RetrievalSummary {

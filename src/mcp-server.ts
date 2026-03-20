@@ -13,21 +13,10 @@ import {
   statsParamsSchema,
   timelineInputSchema,
 } from "./contracts.js";
-import { bootstrapRuntime } from "./db-lifecycle.js";
-import { acquireRuntimeLock } from "./runtime-lock.js";
+import { DaemonClientError, invokeDaemonMethod } from "./daemon-client.js";
 import type { MemoryPaths } from "./types.js";
 
 export async function runMcpServer(paths: MemoryPaths): Promise<void> {
-  const runtime = await bootstrapRuntime(paths, "mcp-server");
-  if (!runtime.service) {
-    throw new Error("MCP server cannot start without a healthy database");
-  }
-  const service = runtime.service;
-  const lock = acquireRuntimeLock(paths, "mcp-server", {
-    replaceExisting: true,
-    expectedCommandSubstrings: ["cli.js", "mcp-server"],
-  });
-
   const server = new McpServer({
     name: "codex-mem",
     version: "0.1.0",
@@ -57,24 +46,15 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           type,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const observations = await service.search(input);
-
-        const compact = observations.map((row) => ({
+        const result = await invokeDaemonMethod<{ observations: Array<Record<string, unknown>> }>(paths, "search", input);
+        const compact = result.observations.map((row) => ({
           id: row.id,
           type: row.type,
           title: row.title,
           createdAt: row.createdAt,
           cwd: row.cwd,
         }));
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ observations: compact }, null, 2),
-            },
-          ],
-        };
+        return ok({ observations: compact });
       } catch (error) {
         return toolError(error);
       }
@@ -103,15 +83,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           cwd,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const observations = await service.timeline(input.anchor, input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ observations }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "timeline", input));
       } catch (error) {
         return toolError(error);
       }
@@ -130,15 +102,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     async ({ ids }) => {
       try {
         const input = getObservationsInputSchema.parse({ ids });
-        const observations = await service.getByIds(input.ids);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ observations }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "get_observations", input));
       } catch (error) {
         return toolError(error);
       }
@@ -158,15 +122,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     async ({ text, title, cwd }) => {
       try {
         const input = saveMemoryInputSchema.parse({ text, title, cwd });
-        const id = await service.saveMemory(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ status: "saved", id }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "save_memory", input));
       } catch (error) {
         return toolError(error);
       }
@@ -195,48 +151,9 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
         title: savePreferenceInputSchema.shape.title,
       },
     },
-    async ({
-      schema_version,
-      key,
-      scope,
-      trigger,
-      preferred,
-      avoid,
-      example_good,
-      example_bad,
-      confidence,
-      source,
-      supersedes,
-      created_at,
-      cwd,
-      title,
-    }) => {
+    async (input) => {
       try {
-        const input = savePreferenceInputSchema.parse({
-          schema_version,
-          key,
-          scope,
-          trigger,
-          preferred,
-          avoid,
-          example_good,
-          example_bad,
-          confidence,
-          source,
-          supersedes,
-          created_at,
-          cwd,
-          title,
-        });
-        const id = await service.savePreference(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ status: "saved", id }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "save_preference", savePreferenceInputSchema.parse(input)));
       } catch (error) {
         return toolError(error);
       }
@@ -267,22 +184,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           include_superseded,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const preferences = await service.listPreferences({
-          cwd: input.cwd,
-          key: input.key,
-          scope: input.scope,
-          limit: input.limit,
-          includeSuperseded: input.include_superseded,
-          scopeMode: input.scopeMode,
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ preferences }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "list_preferences", input));
       } catch (error) {
         return toolError(error);
       }
@@ -309,20 +211,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           limit,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const resolved = await service.resolvePreferences({
-          cwd: input.cwd,
-          keys: input.keys,
-          limit: input.limit,
-          scopeMode: input.scopeMode,
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ resolved }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "resolve_preferences", input));
       } catch (error) {
         return toolError(error);
       }
@@ -341,15 +230,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     async ({ cwd, scopeMode }) => {
       try {
         const input = statsParamsSchema.parse({ cwd, scopeMode: scopeMode ?? "exact_workspace" });
-        const stats = await service.stats(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ stats }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "stats", input));
       } catch (error) {
         return toolError(error);
       }
@@ -367,15 +248,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     async ({ limit }) => {
       try {
         const input = projectListParamsSchema.parse({ limit });
-        const projects = await service.projects(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ projects }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "projects", input));
       } catch (error) {
         return toolError(error);
       }
@@ -399,15 +272,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           limit,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const sessions = await service.sessions(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ sessions }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "sessions", input));
       } catch (error) {
         return toolError(error);
       }
@@ -440,15 +305,7 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
           preferenceLimit,
           scopeMode: scopeMode ?? "exact_workspace",
         });
-        const contextPack = await service.buildContextPack(input);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ contextPack }, null, 2),
-            },
-          ],
-        };
+        return ok(await invokeDaemonMethod(paths, "build_context", input));
       } catch (error) {
         return toolError(error);
       }
@@ -468,8 +325,6 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     forcedExitTimer = setTimeout(() => {
-      lock.release();
-      service.close();
       process.exit(0);
     }, 250);
     forcedExitTimer.unref?.();
@@ -477,42 +332,58 @@ export async function runMcpServer(paths: MemoryPaths): Promise<void> {
     void server
       .close()
       .catch(() => {
-        // Fall through to the forced-exit path below.
+        // Fall through to forced exit.
       })
       .finally(() => {
         if (forcedExitTimer) {
           clearTimeout(forcedExitTimer);
           forcedExitTimer = null;
         }
-        lock.release();
-        service.close();
         process.exit(0);
       });
   }
 
   process.on("SIGINT", gracefulShutdown);
   process.on("SIGTERM", gracefulShutdown);
-
-  // StdioServerTransport does not listen for stdin 'end'. When the parent
-  // process closes the pipe (session ends), the server would stay alive
-  // forever. Treat stdin closure as a shutdown signal.
   process.stdin.resume();
   process.stdin.on("end", gracefulShutdown);
   process.stdin.on("close", gracefulShutdown);
 
-  try {
-    await server.connect(transport);
-  } catch (error) {
-    lock.release();
-    service.close();
-    throw error;
-  }
+  await server.connect(transport);
+}
+
+function ok(payload: unknown): { content: Array<{ type: "text"; text: string }> } {
+  return {
+    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+  };
 }
 
 function toolError(error: unknown): {
   isError: true;
   content: Array<{ type: "text"; text: string }>;
 } {
+  if (error instanceof DaemonClientError) {
+    return {
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              error: {
+                code: error.code,
+                message: error.message,
+                status: error.status,
+                details: error.payload,
+              },
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+    };
+  }
   const message = error instanceof Error ? error.message : String(error);
   return {
     isError: true,

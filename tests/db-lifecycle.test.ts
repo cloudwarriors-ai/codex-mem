@@ -139,6 +139,46 @@ describe("db lifecycle", () => {
     const recovery = await recoverDatabase(paths, "auto");
     expect(recovery.modeUsed).toBe("service-path");
   });
+
+  it("restores from the latest healthy snapshot even when manifest paths are non-portable", async () => {
+    const paths = createFixture();
+    const service = new MemoryService(paths);
+    await service.saveMemory({ text: "portable snapshot recovery", cwd: "/Users/chadsimon/code/project-a" });
+    service.close();
+
+    const snapshot = await createSnapshot(paths, "portable-recovery");
+    const manifestPath = join(paths.dataDir, "backups", "manifest.json");
+    writeFileSync(
+      manifestPath,
+      `${JSON.stringify(
+        {
+          snapshots: [
+            {
+              ...snapshot,
+              relativePath: undefined,
+              path: `/root/.codex-mem/backups/${snapshot.id}`,
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      "utf8",
+    );
+
+    writeFileSync(paths.dbPath, "not sqlite", "utf8");
+
+    const recovery = await recoverDatabase(paths, "db");
+    expect(recovery.modeUsed).toBe("db");
+    expect(recovery.report.status).toBe("repaired");
+
+    const health = await getStatusReport(paths);
+    expect(health.dbHealth).toBe("ok");
+
+    const healedManifest = getSnapshotManifest(paths);
+    expect(healedManifest.snapshots[0]?.path.startsWith(join(paths.dataDir, "backups"))).toBe(true);
+    expect(healedManifest.snapshots[0]?.relativePath).toBe(snapshot.id);
+  });
 });
 
 function createFixture(): MemoryPaths {
