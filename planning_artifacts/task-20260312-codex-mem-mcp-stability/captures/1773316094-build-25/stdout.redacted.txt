@@ -1,0 +1,4 @@
+
+> codex-mem@0.1.1 build
+> rm -rf dist && tsc -p tsconfig.build.json && mkdir -p dist/dashboard/client && cp -R src/dashboard/client/* dist/dashboard/client/
+

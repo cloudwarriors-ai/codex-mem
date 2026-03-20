@@ -9,6 +9,7 @@ import type { MemoryPaths, SyncResult } from "../src/types.js";
 const createdRoots: string[] = [];
 
 afterEach(() => {
+  delete process.env.CODEX_MEM_FORCE_PROBE_FAILURE;
   while (createdRoots.length > 0) {
     const root = createdRoots.pop();
     if (root) rmSync(root, { recursive: true, force: true });
@@ -65,6 +66,42 @@ describe("worker", () => {
     } finally {
       service.close();
     }
+  });
+
+  it("refuses to start when the database fails integrity preflight", async () => {
+    const paths = createFixture();
+    writeFileSync(paths.dbPath, "not sqlite", "utf8");
+
+    await expect(
+      runWorker(paths, {
+        runOnce: true,
+      }),
+    ).rejects.toMatchObject({
+      name: "DatabaseHealthError",
+      report: expect.objectContaining({
+        safeToStart: false,
+        dbHealth: expect.stringMatching(/db_(unreadable|corrupt)/),
+      }),
+    });
+  });
+
+  it("refuses to start when service-path probes fail even if the DB is healthy", async () => {
+    const paths = createFixture();
+    seedInitialSession(paths.codexHome);
+    process.env.CODEX_MEM_FORCE_PROBE_FAILURE = "query_smoke_search:error:forced probe failure";
+
+    await expect(
+      runWorker(paths, {
+        runOnce: true,
+      }),
+    ).rejects.toMatchObject({
+      name: "DatabaseHealthError",
+      report: expect.objectContaining({
+        dbHealth: "ok",
+        servicePathHealth: "query_path_error",
+        safeToStart: false,
+      }),
+    });
   });
 });
 

@@ -1,0 +1,456 @@
+{
+  "adaptation_summary": {
+    "event_count": 0,
+    "events": [],
+    "latest_event": {},
+    "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.adaptation-log.jsonl"
+  },
+  "artifacts": {
+    "adaptation_log": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.adaptation-log.jsonl",
+    "execution_coverage": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.execution-coverage.json",
+    "execution_ledger": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.execution-ledger.json",
+    "operator_view": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.operator-view.json",
+    "packet_quality": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.packet-quality.json",
+    "packet_results": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.packet-results.jsonl",
+    "repo_capabilities": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.repo-capabilities.json",
+    "schedule": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.schedule.json",
+    "status": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.status.json",
+    "summary": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.summary.json",
+    "support_confidence": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.support-confidence.json",
+    "validation_plan": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+  },
+  "blockers": [
+    {
+      "cycle_id": "objective-task-20260312-codex-mem-mcp-stability-cycle-001",
+      "kind": "checkpoint",
+      "message": "Checkpoint is unhealthy: checkpoint_not_attempted.",
+      "packet_id": "",
+      "proof_artifact": "",
+      "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.checkpoint.json",
+      "source_label": "task-20260312-codex-mem-mcp-stability/objective.checkpoint.json"
+    },
+    {
+      "cycle_id": "objective-task-20260312-codex-mem-mcp-stability-cycle-001",
+      "kind": "support_confidence",
+      "message": "Unsupported closure claim: objective claim ahead of external support.",
+      "packet_id": "",
+      "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.support-confidence.json",
+      "source_label": "task-20260312-codex-mem-mcp-stability/objective.support-confidence.json"
+    }
+  ],
+  "checkpoint_health": {
+    "checkpoint_block_reason": "checkpoint_not_attempted",
+    "checkpoint_blocked": true,
+    "checkpoint_commit": "",
+    "rollback_validation_ref": "",
+    "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.checkpoint.json"
+  },
+  "closure_state": "",
+  "current_cycle_id": "objective-task-20260312-codex-mem-mcp-stability-cycle-001",
+  "current_frontier": [
+    "P0"
+  ],
+  "execution_coverage": {
+    "deterministic_packet_count": 7,
+    "deterministic_ratio": 1.0,
+    "fallback_packet_count": 0,
+    "fallback_packet_ids": [],
+    "fallback_reasons": {},
+    "non_review_deterministic_ratio": 1.0,
+    "packet_count": 7,
+    "review_packet_count": 0,
+    "route_hint": "R3",
+    "schema_version": "objective-execution-coverage.v1",
+    "status": "pass",
+    "thresholds": {
+      "deterministic_ratio_min": 0.9,
+      "non_review_deterministic_ratio_min": 0.9
+    }
+  },
+  "explanations": {
+    "closure_confidence": {
+      "level": "not_ready",
+      "message": "Closure is not ready yet."
+    },
+    "fallback_analysis": {
+      "acceptable": true,
+      "message": "No fallback packets are in the objective."
+    },
+    "frontier_change_explanation": "Last cycle objective-task-20260312-codex-mem-mcp-stability-cycle-001 moved the frontier because dependency_unlocked.",
+    "why_blocked": "Runtime is not blocked.",
+    "why_this_is_next": "Packet P0 is next because it is in the runnable frontier, uses command_capture, and no unresolved dependency or conflict excludes it."
+  },
+  "external_support_coverage": {
+    "checkpoint_ready": false,
+    "deterministic_coverage_status": "pass",
+    "fallback_support_packet_ids": [],
+    "required_lane_gap_count": 3,
+    "validation_gap_present": false
+  },
+  "fallback_packets": [],
+  "health_signals": {
+    "checkpoint_unhealthy": true,
+    "closure_claim_is_strong": false,
+    "closure_ready": false,
+    "closure_ready_but_weak": false,
+    "fallback_burden_high": false,
+    "fallback_count": 0,
+    "fallback_ratio": 0.0,
+    "fallback_warning_threshold": 0.2,
+    "human_attention_required": true,
+    "safe_momentum_available": true,
+    "stagnating": false,
+    "support_backed_closure": false,
+    "validation_gap_present": false
+  },
+  "next_action": "P0",
+  "next_recommended_packet": "P0",
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "packet_counts": {
+    "accepted": 0,
+    "blocked": 0,
+    "cancelled": 0,
+    "escalated": 0,
+    "queued": 4,
+    "total": 7
+  },
+  "packet_quality_summary": {
+    "hard_fail_packet_ids": [],
+    "warning_packet_ids": [],
+    "budget": {
+      "status": "pass"
+    },
+    "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.packet-quality.json"
+  },
+  "repo_capabilities_summary": {
+    "confidence_by_lane": {
+      "build": "high",
+      "lint": "none",
+      "schema_check": "none",
+      "security_sensitive_review": "none",
+      "smoke_e2e": "none",
+      "tests": "high",
+      "typecheck": "high"
+    },
+    "detectors_run": [
+      "node_package_json"
+    ],
+    "enabled_lanes": [
+      "build",
+      "security_sensitive_review",
+      "tests",
+      "typecheck"
+    ],
+    "low_confidence_lanes": [],
+    "missing_capabilities": {
+      "lint": "No deterministic repo capability discovered for lint.",
+      "schema_check": "No deterministic repo capability discovered for schema_check.",
+      "smoke_e2e": "No deterministic repo capability discovered for smoke_e2e."
+    },
+    "source_artifact": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.repo-capabilities.json",
+    "source_refs": {
+      "build": [
+        "/Users/chadsimon/code/codex-mem/package.json"
+      ],
+      "lint": [],
+      "schema_check": [],
+      "security_sensitive_review": [],
+      "smoke_e2e": [],
+      "tests": [
+        "/Users/chadsimon/code/codex-mem/package.json"
+      ],
+      "typecheck": [
+        "/Users/chadsimon/code/codex-mem/package.json"
+      ]
+    }
+  },
+  "route_hint": "R3",
+  "safe_momentum_available": true,
+  "schema_version": "objective-operator-view.v1",
+  "strategy_mix": [
+    "command_capture",
+    "multi_command_pipeline",
+    "validation_command"
+  ],
+  "support_backed_closure": false,
+  "support_confidence": {
+    "external_support_coverage": {
+      "checkpoint_ready": false,
+      "deterministic_coverage_status": "pass",
+      "fallback_support_packet_ids": [],
+      "required_lane_gap_count": 3,
+      "validation_gap_present": false
+    },
+    "final_gate_recommendation": "continue_with_remediation",
+    "mode": "enforce",
+    "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+    "objective_support_status": "unsupported",
+    "packet_support": [
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P0.verdict.json",
+        "packet_id": "P0",
+        "runtime_state": "queued",
+        "strategy_name": "command_capture",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P1.verdict.json",
+        "packet_id": "P1",
+        "runtime_state": "queued",
+        "strategy_name": "command_capture",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P2.verdict.json",
+        "packet_id": "P2",
+        "runtime_state": "queued",
+        "strategy_name": "command_capture",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P3.verdict.json",
+        "packet_id": "P3",
+        "runtime_state": "queued",
+        "strategy_name": "validation_command",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/packet-validation-lint.verdict.json",
+        "packet_id": "packet-validation-lint",
+        "runtime_state": "",
+        "strategy_name": "multi_command_pipeline",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/packet-validation-tests.verdict.json",
+        "packet_id": "packet-validation-tests",
+        "runtime_state": "",
+        "strategy_name": "multi_command_pipeline",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      },
+      {
+        "artifact_path": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/packet-validation-types-build.verdict.json",
+        "packet_id": "packet-validation-types-build",
+        "runtime_state": "",
+        "strategy_name": "multi_command_pipeline",
+        "support_status": "pending",
+        "unsupported_risk_reason": ""
+      }
+    ],
+    "schema_version": "objective-support-confidence.v1",
+    "support_backed_closure": false,
+    "support_gap_reasons": [
+      "validation_claim_ahead_of_lane_coverage"
+    ],
+    "support_remediation_available": true,
+    "track_id": "task-20260312-codex-mem-mcp-stability",
+    "unsupported_closure_risk": "objective_claim_ahead_of_external_support"
+  },
+  "support_gaps": [
+    "validation_claim_ahead_of_lane_coverage"
+  ],
+  "support_remediation_available": true,
+  "timeline": [
+    {
+      "artifacts": {
+        "result": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/cycles/objective-task-20260312-codex-mem-mcp-stability-cycle-001/cycle.result.json",
+        "review": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/cycles/objective-task-20260312-codex-mem-mcp-stability-cycle-001/cycle.review.json",
+        "state": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/cycles/objective-task-20260312-codex-mem-mcp-stability-cycle-001/cycle.state.json"
+      },
+      "blockers_cleared": [],
+      "blockers_introduced": [],
+      "checkpoint_outcome": {
+        "blocked": false,
+        "reason": ""
+      },
+      "closure_state": "",
+      "cycle_id": "objective-task-20260312-codex-mem-mcp-stability-cycle-001",
+      "frontier_movement": true,
+      "frontier_movement_reason": "dependency_unlocked",
+      "packet_ids": [
+        "P0"
+      ],
+      "verifier_outcome": {
+        "accepted": 0,
+        "blocked_boundary": 0,
+        "rejected_rework": 0
+      }
+    }
+  ],
+  "track_id": "task-20260312-codex-mem-mcp-stability",
+  "trust_report": {
+    "checkpoint_confidence": "blocked",
+    "closure_strength": "pending",
+    "deterministic_coverage": 1.0,
+    "fallback_dependence": 0.0,
+    "low_confidence_lanes": [],
+    "manual_dependencies": [],
+    "non_review_deterministic_coverage": 1.0,
+    "support_confidence": "unsupported",
+    "support_gap_reasons": [
+      "validation_claim_ahead_of_lane_coverage"
+    ],
+    "support_remediation_available": true,
+    "validation_coverage_strength": "complete",
+    "weakening_factors": [
+      "checkpoint_unhealthy",
+      "unsupported_closure_risk"
+    ]
+  },
+  "unsupported_closure_risk": "objective_claim_ahead_of_external_support",
+  "updated_at": "2026-03-12T11:52:46+00:00",
+  "validation_coverage": [
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "high",
+      "generated_packet_ids": [
+        "packet-validation-tests"
+      ],
+      "lane": "tests",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "",
+      "paths": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "reasons": [
+        "code path touched: /Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "required": true,
+      "status": "ready"
+    },
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "high",
+      "generated_packet_ids": [
+        "packet-validation-types-build"
+      ],
+      "lane": "types_build",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "",
+      "paths": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "reasons": [
+        "code path touched: /Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "required": true,
+      "status": "ready"
+    },
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "none",
+      "generated_packet_ids": [
+        "packet-validation-lint"
+      ],
+      "lane": "lint",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "No deterministic repo capability discovered for lint.",
+      "paths": [
+        "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "reasons": [
+        "code path touched: /Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+        "code path touched: /Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py"
+      ],
+      "required": true,
+      "status": "ready"
+    },
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "none",
+      "generated_packet_ids": [],
+      "lane": "smoke_e2e",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "No deterministic repo capability discovered for smoke_e2e.",
+      "paths": [],
+      "reasons": [],
+      "required": false,
+      "status": "optional"
+    },
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "none",
+      "generated_packet_ids": [],
+      "lane": "migration_schema",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "No deterministic repo capability discovered for schema_check.",
+      "paths": [],
+      "reasons": [],
+      "required": false,
+      "status": "optional"
+    },
+    {
+      "accepted_packet_ids": [],
+      "artifact_ref": {
+        "label": "task-20260312-codex-mem-mcp-stability/objective.validation-plan.json",
+        "source": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/objective.validation-plan.json"
+      },
+      "capability_confidence": "none",
+      "generated_packet_ids": [],
+      "lane": "security_sensitive_review",
+      "manual_only_blocker": "",
+      "missing_capability_reason": "",
+      "paths": [],
+      "reasons": [],
+      "required": false,
+      "status": "optional"
+    }
+  ],
+  "schedule_summary": {
+    "current_frontier": [],
+    "runnable_set": [],
+    "accepted_packet_count": 7,
+    "total_packet_count": 7
+  },
+  "objective_status_summary": {
+    "closure_state": "OBJECTIVE_COMPLETE",
+    "completed_packets": [
+      "P0",
+      "P1",
+      "P2",
+      "P3",
+      "packet-validation-lint",
+      "packet-validation-tests",
+      "packet-validation-types-build"
+    ],
+    "pending_packets": [],
+    "blocked_packets": []
+  }
+}

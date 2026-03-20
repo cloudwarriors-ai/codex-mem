@@ -1,0 +1,78 @@
+{
+  "bootstrap_commands": [
+    "cd /Users/chadsimon/code/codex-mem && git status --short --branch",
+    "cd /Users/chadsimon/code/codex-mem && npm run build"
+  ],
+  "checkpoint_attempted_at": "2026-03-12T11:58:06Z",
+  "checkpoint_block_evidence": "",
+  "checkpoint_block_reason": "",
+  "checkpoint_blocked": false,
+  "checkpoint_commit": "pending-mcp-stability-commit",
+  "checkpoint_id": "task-20260312-codex-mem-mcp-stability-checkpoint-000",
+  "checkpoint_strategy": "git_checkpoint_required",
+  "clean_state_assertions": [
+    "Only the MCP stability scope is staged for commit.",
+    "Unrelated dirty branch work remains untouched.",
+    "Fresh desktop-session validation may still require a new Codex app session."
+  ],
+  "current_frontier": [],
+  "escalation_candidates": [],
+  "feature_ledger_ref": "objective.feature-list.json",
+  "handoff_notes": "Resume objective-task-20260312-codex-mem-mcp-stability from runtime artifacts without relying on chat history.",
+  "last_forward_movement": "implementation_verified",
+  "last_verified_packet_ids": [
+    "P0",
+    "P1",
+    "P2",
+    "P3",
+    "packet-validation-lint",
+    "packet-validation-tests",
+    "packet-validation-types-build"
+  ],
+  "next_recommended_packet": "",
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "open_risks": [
+    "Fresh Codex desktop-session validation is still required after push."
+  ],
+  "progress_log_ref": "objective.progress.jsonl",
+  "repo_state_summary": {
+    "branch": "codex/scope-isolation-hardening",
+    "cwd": "/Users/chadsimon/code/codex-mem",
+    "is_git_repo": true,
+    "repo_root": "/Users/chadsimon/code/codex-mem",
+    "status_short": [
+      "M src/cli.ts",
+      "M src/dashboard-server.ts",
+      "M src/dashboard/routes.ts",
+      "M src/db.ts",
+      "M src/index.ts",
+      "M src/mcp-server.ts",
+      "M src/types.ts",
+      "M src/worker.ts",
+      "M tests/dashboard-server.test.ts",
+      "M tests/mcp-server-shutdown.test.ts",
+      "M tests/worker.test.ts",
+      "?? .dockerignore",
+      "?? Dockerfile.debian",
+      "?? docker-compose.debian.yml",
+      "?? docker/",
+      "?? planning_artifacts/",
+      "?? src/db-lifecycle.ts",
+      "?? src/db-pragmas.ts",
+      "?? src/runtime-lock.ts",
+      "?? tests/cli-lifecycle.test.ts",
+      "?? tests/db-lifecycle.test.ts",
+      "?? tests/runtime-lock.test.ts"
+    ]
+  },
+  "rollback_validation_ref": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/captures/1773316515-rollback-scope-dry-run-100/manifest.json",
+  "schema_version": "objective-checkpoint.v1",
+  "stagnation_risk": "low",
+  "track_id": "task-20260312-codex-mem-mcp-stability",
+  "ui_evidence_required": false,
+  "updated_at": "2026-03-12T11:58:06Z",
+  "validation_commands": [
+    "cd /Users/chadsimon/code/codex-mem && npm test -- --run tests/mcp-server-shutdown.test.ts tests/runtime-lock.test.ts",
+    "cd /Users/chadsimon/code/codex-mem && npm test"
+  ]
+}

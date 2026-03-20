@@ -1,5 +1,7 @@
 import http from "node:http";
-import { MemoryService } from "./memory-service.js";
+import { isSharedDefaultDataDir } from "./config.js";
+import { acquireRuntimeLock } from "./runtime-lock.js";
+import { bootstrapRuntime, ensureHealthySnapshot, inspectRuntimeHealth } from "./db-lifecycle.js";
 import type { MemoryPaths } from "./types.js";
 import { DashboardEventHub } from "./dashboard/events.js";
 import { writeError } from "./dashboard/http.js";
@@ -20,14 +22,28 @@ export async function startDashboardServer(
   paths: MemoryPaths,
   options?: { host?: string | undefined; port?: number | undefined },
 ): Promise<DashboardServer> {
+  if (isSharedDefaultDataDir(paths.dataDir)) {
+    throw new Error(
+      "dashboard cannot open the shared Codex memory store directly; use daemon-backed CLI/MCP or migrate dashboard proxy support first",
+    );
+  }
   const host = options?.host ?? process.env.CODEX_MEM_DASHBOARD_HOST ?? DEFAULT_HOST;
   const port = sanitizePort(options?.port ?? Number(process.env.CODEX_MEM_DASHBOARD_PORT ?? DEFAULT_PORT));
-  const service = new MemoryService(paths);
+  const runtime = await bootstrapRuntime(paths, "dashboard", { allowDegraded: true });
+  const service = runtime.service;
+  const lock = service ? acquireRuntimeLock(paths, "dashboard") : null;
   const events = new DashboardEventHub();
+  const state = {
+    dbHealth: runtime.health,
+    lastIntegrityCheckAt: runtime.health.checkedAt,
+    lastHealthySnapshotAt: runtime.health.latestHealthySnapshot?.createdAt,
+    degradedReason: runtime.health.degradedReason,
+    lastSync: null as null | { status: "ok"; filesScanned: number; observationsInserted: number },
+  };
 
   const server = http.createServer(async (req, res) => {
     try {
-      await routeDashboardRequest(req, res, service, host, events);
+      await routeDashboardRequest(req, res, service, host, events, state);
     } catch (error) {
       const mapped = normalizeDashboardError(error);
       writeError(res, mapped.status, mapped.code, mapped.message);
@@ -35,25 +51,45 @@ export async function startDashboardServer(
   });
 
   const syncIntervalMs = readSyncIntervalMs();
-  const syncTimer = setInterval(() => {
-    void service
-      .sync()
-      .then((sync) => {
-        events.publishSync(sync);
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        events.publishSyncError(message);
-      });
-  }, syncIntervalMs);
+  const syncTimer =
+    service === null
+      ? null
+      : setInterval(() => {
+          void (async () => {
+            const health = await inspectRuntimeHealth(paths, "dashboard");
+            state.dbHealth = health;
+            state.lastIntegrityCheckAt = health.checkedAt;
+            state.lastHealthySnapshotAt = health.latestHealthySnapshot?.createdAt;
+            state.degradedReason = health.degradedReason;
+            if (!health.safeToStart) {
+              events.publishSyncError(`database degraded: ${health.status}`);
+              return;
+            }
+            const sync = await service.sync();
+            state.lastSync = sync;
+            await ensureHealthySnapshot(paths, service, "dashboard-post-sync");
+            events.publishSync(sync);
+          })().catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            events.publishSyncError(message);
+          });
+        }, syncIntervalMs);
 
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, () => {
-      server.off("error", reject);
-      resolve();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, host, () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
-  });
+  } catch (error) {
+    if (syncTimer) clearInterval(syncTimer);
+    events.close();
+    service?.close();
+    lock?.release();
+    throw error;
+  }
 
   const address = server.address();
   const actualPort = typeof address === "object" && address ? address.port : port;
@@ -64,7 +100,7 @@ export async function startDashboardServer(
     port: actualPort,
     url,
     close: async () => {
-      clearInterval(syncTimer);
+      if (syncTimer) clearInterval(syncTimer);
       events.close();
       await new Promise<void>((resolve, reject) => {
         server.close((err) => {
@@ -72,7 +108,8 @@ export async function startDashboardServer(
           else resolve();
         });
       });
-      service.close();
+      service?.close();
+      lock?.release();
     },
   };
 }

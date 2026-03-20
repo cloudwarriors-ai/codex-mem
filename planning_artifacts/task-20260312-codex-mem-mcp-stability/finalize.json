@@ -1,0 +1,16 @@
+{
+  "accepted_type": "ACCEPTED_SUCCESS",
+  "blocked_fields": [],
+  "migration_fallback_used": false,
+  "missing_fields": [],
+  "next_step": "Gate passed. Finalization allowed.",
+  "objective_closure_state": "OBJECTIVE_COMPLETE",
+  "ok": true,
+  "reason": "approved",
+  "review_status_seen": "approve",
+  "review_status_trusted": false,
+  "status": "approve",
+  "track_id": "task-20260312-codex-mem-mcp-stability",
+  "track_token": "task-20260312-codex-mem-mcp-stability",
+  "type": "planning_gate_finalize"
+}

@@ -1,0 +1,30 @@
+{
+  "blocked_fields": [],
+  "content": "Plan contract, frontloaded sufficiency, and runtime-compatibility checks passed.",
+  "gate": "plan",
+  "meta": {
+    "frontloaded_artifacts": {
+      "compiler": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.compiler.json",
+      "coverage": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.coverage.json",
+      "gaps": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.gaps.json",
+      "sufficiency": "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.sufficiency.json"
+    },
+    "plan_status": "execution_ready",
+    "runtime_compatible": true,
+    "smoke_100_pass": true,
+    "smoke_quality": {
+      "best_score": 30,
+      "loop": 3,
+      "score": 30,
+      "stagnant_loops": 0,
+      "stall_limit": 2
+    },
+    "track_id": "task-20260312-codex-mem-mcp-stability",
+    "track_token": "task-20260312-codex-mem-mcp-stability"
+  },
+  "missing_fields": [],
+  "next_step": "Proceed to implementation evidence capture and validation.",
+  "risks": [],
+  "status": "approve",
+  "type": "planning_gate_review"
+}

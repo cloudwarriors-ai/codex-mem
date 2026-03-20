@@ -1,0 +1,22 @@
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/mcp-server-shutdown.test.ts[2m > [22mmcp-server graceful shutdown[2m > [22mreplaces an existing mcp-server for the same data dir
+[31m[1mAssertionError[22m: expected 2 to be +0 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 2[39m
+
+[36m [2m❯[22m tests/mcp-server-shutdown.test.ts:[2m128:27[22m[39m
+    [90m126| [39m    )[33m;[39m
+    [90m127| [39m
+    [90m128| [39m    [34mexpect[39m(result[33m.[39mstatus)[33m.[39m[34mtoBe[39m([34m0[39m)[33m;[39m
+    [90m   | [39m                          [31m^[39m
+    [90m129| [39m  }[33m,[39m [34m10000[39m)[33m;[39m
+    [90m130| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+

@@ -2,7 +2,13 @@
 
 Persistent memory for Codex sessions.
 
-`codex-mem` ingests local Codex session/history logs into SQLite + FTS5, then exposes memory through both CLI commands and MCP tools.
+`codex-mem` ingests local Codex session/history logs into SQLite + FTS5, then exposes memory through CLI commands and MCP tools.
+
+For the shared live Codex store, normal access is now daemon-backed:
+- `codex-mem daemon` owns the SQLite DB
+- `codex-mem mcp-server` is a stdio proxy to the daemon
+- normal CLI retrieval/save commands proxy to the daemon when using `~/.codex-mem`
+- maintenance commands keep direct ownership and require exclusive maintenance mode
 
 ## Features
 
@@ -13,6 +19,7 @@ Persistent memory for Codex sessions.
   - `timeline` (context)
   - `get_observations` (full details)
 - MCP server for in-session retrieval by Codex
+- Single daemon ownership for the shared live Codex store
 - Manual `save_memory` support
 - Background worker mode for automatic sync polling
 - Browser dashboard with live SSE status, project/session lens, timeline drill-down, and context preview
@@ -96,12 +103,21 @@ codex-mem projects --limit 20 --json
 codex-mem sessions --cwd /Users/chadsimon/code --limit 20 --json
 codex-mem build-context --query "schema migration" --session-limit 5 --json
 codex-mem worker --interval-seconds 15
+codex-mem daemon --json
+codex-mem ensure-daemon --json
+codex-mem daemon-status --json
 codex-mem dashboard --host 127.0.0.1 --port 37811
 codex-mem mcp-server
 ```
 
 `search` excludes `tool_call`/`tool_output` noise by default; pass `--type tool_call` or `--type tool_output` when you want raw tool traces.
 `dashboard` defaults to `http://127.0.0.1:37811`.
+`status --json` now includes both DB/service-path health and daemon health.
+
+For the shared live store:
+- `dashboard` direct DB access is blocked until it is migrated to a daemon-backed path
+- transient CLI/MCP startup does not create prestart snapshots
+- incident bundles are written under `~/.codex-mem/incidents/`
 
 ## MCP Tools
 
@@ -129,8 +145,9 @@ npm run build
 3. FTS5 powers full-text retrieval.
 4. Service layer orchestrates sync + retrieval.
 5. Contracts layer defines canonical observation/API schemas.
-6. CLI, MCP, and dashboard HTTP layer expose the same underlying service with contract-validated inputs.
-7. Dashboard frontend is split into modules (`api`, `controller`, `dom`, `render`, `state`) and loaded via static module assets.
+6. The daemon owns the live DB, while CLI and MCP proxy normal operations to it for the shared Codex store.
+7. Maintenance commands operate directly only under exclusive ownership.
+8. Dashboard frontend is split into modules (`api`, `controller`, `dom`, `render`, `state`) and loaded via static module assets.
 
 ## Notes
 

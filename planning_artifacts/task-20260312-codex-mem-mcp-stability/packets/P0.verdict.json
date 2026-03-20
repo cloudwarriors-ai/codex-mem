@@ -1,0 +1,18 @@
+{
+  "packet_id": "P0",
+  "strategy_name": "command_capture",
+  "runner_kind": "worker",
+  "runtime_state": "accepted",
+  "verifier_output": "accepted",
+  "allowed_scope_status": "within_scope",
+  "support_status": "supported",
+  "unsupported_risk_reason": "",
+  "changed_files": [
+    "/Users/chadsimon/code/codex-mem/src/mcp-server.ts",
+    "/Users/chadsimon/code/codex-mem/src/runtime-lock.ts",
+    "/Users/chadsimon/code/codex-mem/tests/mcp-server-shutdown.test.ts",
+    "/Users/chadsimon/code/codex-mem/tests/runtime-lock.test.ts",
+    "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/plan.json"
+  ],
+  "updated_at": "2026-03-12T11:58:06Z"
+}

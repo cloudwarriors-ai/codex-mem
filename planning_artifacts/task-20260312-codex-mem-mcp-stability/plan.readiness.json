@@ -1,0 +1,73 @@
+{
+  "autonomous_session_readiness": {
+    "next_executable_frontier": [
+      "P0"
+    ],
+    "readiness_gaps": [],
+    "safe_momentum_ready": true,
+    "status": "execution_ready"
+  },
+  "frontier_map": [
+    {
+      "execution_mode": "sequence_required",
+      "packet_id": "P0"
+    },
+    {
+      "execution_mode": "sequence_required",
+      "packet_id": "P1"
+    },
+    {
+      "execution_mode": "sequence_required",
+      "packet_id": "P2"
+    },
+    {
+      "execution_mode": "sequence_required",
+      "packet_id": "P3"
+    }
+  ],
+  "momentum_map": [
+    {
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P0",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P1"
+      ]
+    },
+    {
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P1",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P2"
+      ]
+    },
+    {
+      "isolates_blocker": true,
+      "movement_type": "closure_advancing",
+      "packet_id": "P2",
+      "resolves_dependency_classification": true,
+      "unlocks_packets": [
+        "P3"
+      ]
+    },
+    {
+      "isolates_blocker": false,
+      "movement_type": "closure_advancing",
+      "packet_id": "P3",
+      "resolves_dependency_classification": false,
+      "unlocks_packets": []
+    }
+  ],
+  "objective_ref": "task-20260312-codex-mem-mcp-stability",
+  "required_packets": [
+    "P0",
+    "P1",
+    "P2",
+    "P3"
+  ],
+  "schema_version": "plan-readiness.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

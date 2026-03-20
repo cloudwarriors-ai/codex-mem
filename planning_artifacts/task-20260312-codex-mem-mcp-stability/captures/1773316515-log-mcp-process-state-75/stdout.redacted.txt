@@ -1,0 +1,12 @@
+81559 10003 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 10407 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 20917 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 21132 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 37441 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 37891 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 43392 /opt/homebrew/Cellar/python@3.11/3.11.14_2/Frameworks/Python.framework/Versions/3.11/Resources/Python.app/Contents/MacOS/Python /Users/chadsimon/.codex/skills/planning-gate/scripts/run_cmd_capture.py --track-id task-20260312-codex-mem-mcp-stability --stage 75% --name log-mcp-process-state --cwd /Users/chadsimon/code/codex-mem -- bash -lc ps -axo ppid,pid,command | rg '/Users/chadsimon/code/codex-mem/dist/cli\.js mcp-server|app-server' || true
+43392 43411 bash -lc ps -axo ppid,pid,command | rg '/Users/chadsimon/code/codex-mem/dist/cli\.js mcp-server|app-server' || true
+43411 43418 rg /Users/chadsimon/code/codex-mem/dist/cli\.js mcp-server|app-server
+81559 78076 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81559 78215 node /Users/chadsimon/code/codex-mem/dist/cli.js mcp-server
+81440 81559 /Applications/Codex.app/Contents/Resources/codex app-server --analytics-default-enabled

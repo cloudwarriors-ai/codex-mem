@@ -27,6 +27,8 @@ import {
 } from "./parsers.js";
 import { renderDashboardHtml } from "./template.js";
 import { MemoryService } from "../memory-service.js";
+import { inferProcessWorkspaceIdentity, ScopeIsolationError } from "../workspace-identity.js";
+import type { DatabaseHealthReport, SyncResult } from "../types.js";
 
 const VERSION = "0.1.0";
 const DASHBOARD_CLIENT_ENTRY =
@@ -36,9 +38,16 @@ const DASHBOARD_CLIENT_ENTRY =
 export async function routeDashboardRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  service: MemoryService,
+  service: MemoryService | null,
   host: string,
   events: DashboardEventHub,
+  healthState: {
+    dbHealth: DatabaseHealthReport;
+    lastIntegrityCheckAt: string;
+    lastHealthySnapshotAt?: string | undefined;
+    degradedReason?: string | undefined;
+    lastSync: SyncResult | null;
+  },
 ): Promise<void> {
   const method = req.method ?? "GET";
   const url = new URL(req.url ?? "/", `http://${host}`);
@@ -64,7 +73,12 @@ export async function routeDashboardRequest(
   }
 
   if (method === "GET" && url.pathname === "/api/health") {
-    await handleHealth(res, service, events);
+    handleHealth(res, healthState);
+    return;
+  }
+
+  if (service === null || !healthState.dbHealth.safeToStart) {
+    writeError(res, 503, "DB_DEGRADED", healthState.degradedReason ?? "Database is degraded.");
     return;
   }
 
@@ -126,41 +140,65 @@ export async function routeDashboardRequest(
   writeError(res, 404, "NOT_FOUND", "Route not found.");
 }
 
-async function handleHealth(
+function handleHealth(
   res: ServerResponse,
-  service: MemoryService,
-  events: DashboardEventHub,
-): Promise<void> {
-  const sync = await service.sync();
-  events.publishSync(sync);
-
+  healthState: {
+    dbHealth: DatabaseHealthReport;
+    lastIntegrityCheckAt: string;
+    lastHealthySnapshotAt?: string | undefined;
+    degradedReason?: string | undefined;
+    lastSync: SyncResult | null;
+  },
+): void {
   writeJson(res, 200, {
-    status: "ok",
+    status: healthState.dbHealth.safeToStart ? "ok" : "degraded",
     version: VERSION,
-    sync,
+    sync: healthState.lastSync,
+    dbHealth: healthState.dbHealth.dbHealth,
+    servicePathHealth: healthState.dbHealth.servicePathHealth,
+    runtimeContext: healthState.dbHealth.runtimeContext,
+    serviceStatus: healthState.dbHealth.status,
+    lastIntegrityCheckAt: healthState.lastIntegrityCheckAt,
+    lastQueryProbeAt: healthState.dbHealth.lastQueryProbeAt,
+    lastQueryProbeResults: healthState.dbHealth.lastQueryProbeResults,
+    lastHealthySnapshotAt: healthState.lastHealthySnapshotAt,
+    degradedReason: healthState.degradedReason,
     now: new Date().toISOString(),
   });
 }
 
 async function handleSearch(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseSearchParams(url);
-  const observations = await service.search(params);
-  writeJson(res, 200, { observations });
+  const cwd = params.cwd ?? inferProcessWorkspaceIdentity().cwd;
+  const result = await service.searchWithSummary({
+    ...params,
+    cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
+  writeJson(res, 200, {
+    observations: result.observations,
+    retrievalSummary: result.retrievalSummary,
+  });
 }
 
 async function handleTimeline(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseTimelineParams(url);
   const observations = await service.timeline(params.anchor, {
     before: params.before,
-    after: params.after,
-    cwd: params.cwd,
+      after: params.after,
+      cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+      scopeMode: params.scopeMode ?? "exact_workspace",
   });
   writeJson(res, 200, { observations });
 }
 
 async function handleContext(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseContextParams(url);
-  const context = await service.context(params);
+  const context = await service.context({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { context });
 }
 
@@ -170,13 +208,21 @@ async function handleContextPack(
   url: URL,
 ): Promise<void> {
   const params = parseBuildContextParams(url);
-  const contextPack = await service.buildContextPack(params);
+  const contextPack = await service.buildContextPack({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { contextPack });
 }
 
 async function handleStats(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseStatsParams(url);
-  const stats = await service.stats(params);
+  const stats = await service.stats({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { stats });
 }
 
@@ -188,7 +234,11 @@ async function handleProjects(res: ServerResponse, service: MemoryService, url: 
 
 async function handleSessions(res: ServerResponse, service: MemoryService, url: URL): Promise<void> {
   const params = parseSessionListParams(url);
-  const sessions = await service.sessions(params);
+  const sessions = await service.sessions({
+    ...params,
+    cwd: params.cwd ?? inferProcessWorkspaceIdentity().cwd,
+    scopeMode: params.scopeMode ?? "exact_workspace",
+  });
   writeJson(res, 200, { sessions });
 }
 
@@ -218,7 +268,10 @@ async function handleSaveMemory(
   const json = await readJsonBody(req);
   const body = requireJsonObject(json);
   const input = parseSaveMemoryBody(body);
-  const id = await service.saveMemory(input);
+  const id = await service.saveMemory({
+    ...input,
+    cwd: input.cwd ?? inferProcessWorkspaceIdentity().cwd,
+  });
 
   writeJson(res, 200, {
     status: "saved",
@@ -301,6 +354,14 @@ export function normalizeDashboardError(error: unknown): {
       status: 400,
       code: "INVALID_INPUT",
       message: normalized.message,
+    };
+  }
+
+  if (error instanceof ScopeIsolationError) {
+    return {
+      status: 400,
+      code: error.reason.toUpperCase(),
+      message: error.message,
     };
   }
 

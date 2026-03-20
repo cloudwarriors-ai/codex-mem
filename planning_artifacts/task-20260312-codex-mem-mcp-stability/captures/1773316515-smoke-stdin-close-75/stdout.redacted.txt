@@ -1,0 +1,1 @@
+{"scenario":"stdin-close","code":1,"signal":null,"elapsed_ms":140}

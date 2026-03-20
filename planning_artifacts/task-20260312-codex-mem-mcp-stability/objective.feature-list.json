@@ -1,0 +1,207 @@
+{
+  "features": [
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "bundle.json exists",
+          "articles.jsonl exists",
+          "sections.jsonl exists",
+          "chunks.jsonl exists",
+          "summary.json records exact counts and manifest hash"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness writes bundle.json, split JSONL corpus files, and summary.json from the active snapshot.",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/bundle.json",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json"
+        ],
+        "objective_linkage": "req-corpus-export",
+        "rollback_or_fallback": "If corpus export is blocked, stop before fixture generation and preserve existing runtime and snapshot state.",
+        "verifier_acceptance_condition": "Verifier sees exact active snapshot identity and stable exported counts in the harness corpus artifacts."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/bundle.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/corpus/summary.json"
+      ],
+      "packet_ids": [
+        "P0"
+      ],
+      "priority": "critical",
+      "requirement_id": "req-corpus-export",
+      "status": "verified"
+    },
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "existing_qa_index.jsonl exists",
+          "summary.json records row counts and source breakdown",
+          "the harness-local key is distinct from existing repo-wide normalized_question_hash semantics"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness writes existing_qa_index.jsonl and summary.json using a stronger harness-local normalized question key.",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/existing_qa_index.jsonl"
+        ],
+        "objective_linkage": "req-existing-qa-dedupe",
+        "rollback_or_fallback": "If audit scanning over-collects malformed rows, skip those rows and preserve explicit exclusion reasons.",
+        "verifier_acceptance_condition": "Verifier can trace normalized question keys and source counts from the audit output."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/existing_qa_index.jsonl",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/existing-qa/summary.json"
+      ],
+      "packet_ids": [
+        "P0"
+      ],
+      "priority": "core",
+      "requirement_id": "req-existing-qa-dedupe",
+      "status": "verified"
+    },
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "eval_pack.json exists",
+          "harness_manifest.json includes fixture digest and snapshot id",
+          "preflight.json records required health and version checks",
+          "judge-row-results.json exists",
+          "judge-summary.json exists"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness writes fixture artifacts, passes local preflight, and persists judged local eval results from run_live_eval_pack(...).",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/<run_id>/preflight.json",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/<run_id>/judge-summary.json"
+        ],
+        "objective_linkage": "req-fixture-and-eval",
+        "rollback_or_fallback": "If preflight cannot verify the local stack or snapshot identity, stop before eval persistence and do not interpret partial results.",
+        "verifier_acceptance_condition": "Verifier sees preflight evidence, fixture identity, and judged runner output for the same snapshot and run id."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/preflight.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/judge-summary.json"
+      ],
+      "packet_ids": [
+        "P1"
+      ],
+      "priority": "critical",
+      "requirement_id": "req-fixture-and-eval",
+      "status": "verified"
+    },
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "local_misses.jsonl exists",
+          "miss-training-export.jsonl exists",
+          "rows are limited to model_hallucination, prompt_contract_drift, and abstention_mistake",
+          "rows are deduped by the harness-local question key"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness writes local_misses.jsonl and miss-training-export.jsonl for eligible failed rows only.",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/<run_id>/local_misses.jsonl",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/<run_id>/miss-training-export.jsonl"
+        ],
+        "objective_linkage": "req-miss-export",
+        "rollback_or_fallback": "If judged rows are incomplete or invalid, emit explicit skip reasons and do not call lifecycle materialization endpoints.",
+        "verifier_acceptance_condition": "Verifier can trace miss eligibility and dedupe decisions from persisted output and tests."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/local_misses.jsonl",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/miss-training-export.jsonl"
+      ],
+      "packet_ids": [
+        "P2"
+      ],
+      "priority": "core",
+      "requirement_id": "req-miss-export",
+      "status": "verified"
+    },
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "comparison-vs-<baseline_run_id>.json exists",
+          "comparison hard-fails on mismatched fixture digest or case count",
+          "newly_failed and newly_fixed are reported by stable case_id",
+          "answer_mode_changes and grounding_status_changes are reported"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The harness writes a comparison artifact covering pass/fail, answer-mode, and grounding-status deltas with fixture guardrails.",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/<candidate_run_id>/comparison-vs-<baseline_run_id>.json"
+        ],
+        "objective_linkage": "req-run-comparison",
+        "rollback_or_fallback": "If fixture identities differ, stop comparison instead of emitting misleading deltas.",
+        "verifier_acceptance_condition": "Verifier can recompute the comparison basis from stored run manifests and row data."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate/comparison-vs-base.json"
+      ],
+      "packet_ids": [
+        "P2"
+      ],
+      "priority": "core",
+      "requirement_id": "req-run-comparison",
+      "status": "verified"
+    },
+    {
+      "definition_of_done": {
+        "acceptance_checks": [
+          "review.plan.json exists",
+          "review.impl.json exists",
+          "implementation.json exists",
+          "finalize.json exists and ok == true"
+        ],
+        "allowed_scope": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+        ],
+        "behavior_outcome": "The governed track contains validated plan and implementation artifacts plus finalize.json with ok=true.",
+        "evidence_requirements": [
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/review.plan.json",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/implementation.json",
+          "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+        ],
+        "objective_linkage": "req-governed-closeout",
+        "rollback_or_fallback": "If validate_impl or finalize_gate fail, stop with the governed gap isolated rather than asserting completion.",
+        "verifier_acceptance_condition": "Verifier sees planning-gate success with adaptive-memory evidence and no unresolved governed blockers."
+      },
+      "evidence_refs": [
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/implementation.json",
+        "planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+      ],
+      "packet_ids": [
+        "P3"
+      ],
+      "priority": "critical",
+      "requirement_id": "req-governed-closeout",
+      "status": "verified"
+    }
+  ],
+  "objective_id": "objective-task-20260312-codex-mem-mcp-stability",
+  "schema_version": "objective-feature-list.v1",
+  "track_id": "task-20260312-codex-mem-mcp-stability"
+}

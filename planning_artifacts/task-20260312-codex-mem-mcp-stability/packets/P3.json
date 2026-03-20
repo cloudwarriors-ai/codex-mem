@@ -1,0 +1,69 @@
+{
+  "acceptance_checks": [
+    "Focused harness test proof artifacts are captured and pass",
+    "Full npm test proof artifact is captured and passes",
+    "validate_impl and finalize_gate emit approval artifacts"
+  ],
+  "allowed_scope": [
+    "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+  ],
+  "automatable_acceptance": true,
+  "cancelled_by": "",
+  "classification": "ready",
+  "constraints": [
+    "Keep objective.session.json preplan-shaped; runtime state belongs in checkpoint/status/implementation artifacts.",
+    "Record adaptive-memory evidence in implementation.json."
+  ],
+  "definition_of_done": {
+    "acceptance_checks": [
+      "focused harness tests pass",
+      "required existing suites pass",
+      "finalize.json ok == true"
+    ],
+    "allowed_scope": [
+      "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+    ],
+    "behavior_outcome": "The harness closes with green tests and approved planning-gate implementation/finalize artifacts.",
+    "evidence_requirements": [
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/review.impl.json",
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/finalize.json"
+    ],
+    "objective_linkage": "req-governed-closeout",
+    "rollback_or_fallback": "Fix failing tests or governed evidence gaps before asserting completion.",
+    "verifier_acceptance_condition": "Verifier sees passing tests, implementation evidence, and finalize ok=true."
+  },
+  "dependencies": [
+    "P2"
+  ],
+  "dependency_mode": "accepted_upstream",
+  "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P3.verdict.json",
+  "execution_mode": "sequence_required",
+  "execution_strategy": "validation_command",
+  "failure_signals": [
+    "harness_unit_regression",
+    "shared_suite_regression",
+    "governed_validation_failed"
+  ],
+  "fallback_or_rollback": "Do not claim completion without governed approval artifacts.",
+  "last_cycle_id": "",
+  "last_verifier_output": "",
+  "maintainable_completion_path": true,
+  "packet_class": "validation",
+  "packet_id": "P3",
+  "primary_behavior": "Add focused regression coverage and close the governed track with validated implementation artifacts.",
+  "product_meaning_resolved": true,
+  "prohibited_action_required": false,
+  "runtime_state": "queued",
+  "shared_surface_categories": [
+    "tests",
+    "planning-gate"
+  ],
+  "strategy_inputs": {
+    "command": "cd /Users/chadsimon/code/codex-mem && uv run pytest -q tests/unit/test_local_qa_regression_harness.py tests/unit/test_official_docs_eval.py tests/unit/test_snapshot_transfer.py tests/unit/test_lifecycle_control_plane.py",
+    "cwd": "/Users/chadsimon/code/codex-mem",
+    "validation_lane": "tests"
+  },
+  "verifier_mapping": "cycle-verifier:P3"
+}

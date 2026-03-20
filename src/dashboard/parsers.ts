@@ -26,6 +26,7 @@ export function parseSearchParams(url: URL): DashboardSearchParams {
     type: getOptionalString(url, "type"),
     limit: getOptionalInt(url, "limit"),
     offset: getOptionalInt(url, "offset"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 
@@ -35,6 +36,7 @@ export function parseTimelineParams(url: URL): DashboardTimelineParams {
     before: getOptionalInt(url, "before"),
     after: getOptionalInt(url, "after"),
     cwd: getOptionalString(url, "cwd"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 
@@ -44,6 +46,7 @@ export function parseContextParams(url: URL): DashboardContextParams {
     cwd: getOptionalString(url, "cwd"),
     type: getOptionalString(url, "type"),
     limit: getOptionalInt(url, "limit"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 
@@ -64,6 +67,7 @@ export function parseBatchBody(body: Record<string, unknown>): DashboardBatchBod
 export function parseStatsParams(url: URL): StatsParams {
   return statsParamsSchema.parse({
     cwd: getOptionalString(url, "cwd"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 
@@ -77,6 +81,7 @@ export function parseSessionListParams(url: URL): SessionListParams {
   return sessionListParamsSchema.parse({
     cwd: getOptionalString(url, "cwd"),
     limit: getOptionalInt(url, "limit"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 
@@ -86,6 +91,7 @@ export function parseBuildContextParams(url: URL): BuildContextInput {
     cwd: getOptionalString(url, "cwd"),
     limit: getOptionalInt(url, "limit"),
     sessionLimit: getOptionalInt(url, "sessionLimit"),
+    scopeMode: getOptionalString(url, "scopeMode"),
   });
 }
 

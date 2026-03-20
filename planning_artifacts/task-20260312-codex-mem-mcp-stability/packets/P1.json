@@ -1,0 +1,74 @@
+{
+  "acceptance_checks": [
+    "Fixture outputs exist with deterministic ids and digest",
+    "Local preflight records required health and version checks",
+    "run-live-eval persists judged artifacts and local answer rows"
+  ],
+  "allowed_scope": [
+    "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+  ],
+  "automatable_acceptance": true,
+  "cancelled_by": "",
+  "classification": "ready",
+  "constraints": [
+    "Reuse run_live_eval_pack(...) rather than cloning its evaluation flow.",
+    "Fail closed if effective snapshot ids drift from the fixture manifest."
+  ],
+  "definition_of_done": {
+    "acceptance_checks": [
+      "eval_pack.json exists",
+      "preflight.json exists",
+      "judge-summary.json exists"
+    ],
+    "allowed_scope": [
+      "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+    ],
+    "behavior_outcome": "The harness generates a reviewed fixture and runs it safely against the local stack with persisted eval outputs.",
+    "evidence_requirements": [
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/inputs/fixture/eval_pack.json",
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/preflight.json",
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/judge-summary.json"
+    ],
+    "objective_linkage": "req-fixture-and-eval",
+    "rollback_or_fallback": "Stop before miss export/comparison if fixture or preflight evidence is incomplete.",
+    "verifier_acceptance_condition": "Verifier sees fixture identity, local preflight, and runner outputs for the same run."
+  },
+  "dependencies": [
+    "P0"
+  ],
+  "dependency_mode": "accepted_upstream",
+  "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P1.verdict.json",
+  "execution_mode": "sequence_required",
+  "execution_strategy": "command_capture",
+  "failure_signals": [
+    "fixture_generation_unstable",
+    "preflight_failed",
+    "snapshot_identity_mismatch"
+  ],
+  "fallback_or_rollback": "Do not interpret partial results if preflight or snapshot identity fails.",
+  "last_cycle_id": "",
+  "last_verifier_output": "",
+  "maintainable_completion_path": true,
+  "packet_class": "implementation",
+  "packet_id": "P1",
+  "primary_behavior": "Implement deterministic fixture generation and local eval execution with strict preflight and artifact persistence.",
+  "product_meaning_resolved": true,
+  "prohibited_action_required": false,
+  "runtime_state": "queued",
+  "shared_surface_categories": [
+    "fixture-generation",
+    "local-eval",
+    "preflight"
+  ],
+  "strategy_inputs": {
+    "command": "cd /Users/chadsimon/code/codex-mem && uv run python -m py_compile scripts/local_qa_regression_harness.py services/common/qa_regression_harness.py",
+    "cwd": "/Users/chadsimon/code/codex-mem"
+  },
+  "verifier_mapping": "cycle-verifier:P1"
+}

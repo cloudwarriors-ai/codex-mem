@@ -1,0 +1,73 @@
+{
+  "acceptance_checks": [
+    "Miss extraction emits eligible-only JSONL outputs",
+    "Run comparison hard-fails on fixture mismatch",
+    "The run command composes the default end-to-end non-mutating lifecycle path"
+  ],
+  "allowed_scope": [
+    "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+    "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+  ],
+  "automatable_acceptance": true,
+  "cancelled_by": "",
+  "classification": "ready",
+  "constraints": [
+    "Do not call lifecycle materialization endpoints in the default run flow.",
+    "Compare runs by stable case_id only after fixture digest and case count match."
+  ],
+  "definition_of_done": {
+    "acceptance_checks": [
+      "local_misses.jsonl exists",
+      "miss-training-export.jsonl exists",
+      "comparison artifact exists"
+    ],
+    "allowed_scope": [
+      "/Users/chadsimon/code/codex-mem/scripts/local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/services/common/qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/tests/unit/test_local_qa_regression_harness.py",
+      "/Users/chadsimon/code/codex-mem/planning_artifacts/task-20260312-codex-mem-mcp-stability/*"
+    ],
+    "behavior_outcome": "The harness emits reusable corrective exports and deterministic comparison artifacts without mutating lifecycle state.",
+    "evidence_requirements": [
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/smoke-run/miss-training-export.jsonl",
+      "planning_artifacts/task-20260312-codex-mem-mcp-stability/harness_runs/candidate/comparison-vs-base.json"
+    ],
+    "objective_linkage": "req-miss-export",
+    "rollback_or_fallback": "If judged inputs are incomplete or incompatible, stop with explicit reasons rather than emitting misleading exports or comparisons.",
+    "verifier_acceptance_condition": "Verifier can trace eligible misses and comparison deltas from the stored artifacts."
+  },
+  "dependencies": [
+    "P1"
+  ],
+  "dependency_mode": "accepted_upstream",
+  "evidence_destination": "planning_artifacts/task-20260312-codex-mem-mcp-stability/packets/P2.verdict.json",
+  "execution_mode": "sequence_required",
+  "execution_strategy": "command_capture",
+  "failure_signals": [
+    "miss_filtering_incorrect",
+    "comparison_identity_guard_missing",
+    "run_surface_skips_required_stage"
+  ],
+  "fallback_or_rollback": "Keep miss export and comparison explicit and fail closed on incomplete judged inputs.",
+  "last_cycle_id": "",
+  "last_verifier_output": "",
+  "maintainable_completion_path": true,
+  "packet_class": "implementation",
+  "packet_id": "P2",
+  "primary_behavior": "Implement miss extraction, deterministic run comparison, and the composed run command surface.",
+  "product_meaning_resolved": true,
+  "prohibited_action_required": false,
+  "runtime_state": "queued",
+  "shared_surface_categories": [
+    "miss-export",
+    "run-comparison",
+    "harness-cli"
+  ],
+  "strategy_inputs": {
+    "command": "cd /Users/chadsimon/code/codex-mem && uv run python scripts/local_qa_regression_harness.py --help",
+    "cwd": "/Users/chadsimon/code/codex-mem"
+  },
+  "verifier_mapping": "cycle-verifier:P2"
+}

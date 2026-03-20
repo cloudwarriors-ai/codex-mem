@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryService } from "../src/memory-service.js";
-import type { MemoryPaths } from "../src/types.js";
+import type { MemoryPaths, RetrievalBenchmarkCase } from "../src/types.js";
 
 const createdRoots: string[] = [];
 
@@ -100,6 +100,8 @@ describe("MemoryService", () => {
       expect(rows.length).toBe(1);
       expect(rows[0]?.type).toBe("manual_note");
       expect(rows[0]?.title).toContain("migration lock");
+      expect(rows[0]?.memoryClass).toBe("summary_note");
+      expect(rows[0]?.memoryStatus).toBe("active");
     } finally {
       service.close();
     }
@@ -348,9 +350,13 @@ describe("MemoryService", () => {
         sessionLimit: 3,
       });
       expect(contextPack.highlights.length).toBeGreaterThan(0);
+      expect(contextPack.durableMemories.length).toBeGreaterThan(0);
+      expect(contextPack.retrievalSummary.confidenceBand).not.toBe("low");
       expect(contextPack.sessions.length).toBeGreaterThan(0);
       expect(contextPack.notes.some((row) => row.type === "manual_note")).toBe(true);
       expect(contextPack.markdown).toContain("# codex-mem context");
+      expect(contextPack.markdown).toContain("## Durable Memories");
+      expect(contextPack.markdown).toContain("## Retrieval Summary");
       expect(contextPack.markdown).toContain("## Recent Sessions");
 
       const punctuatedSearch = await service.search({
@@ -358,6 +364,130 @@ describe("MemoryService", () => {
         cwd: "/Users/chadsimon/code/my-project",
       });
       expect(punctuatedSearch.some((row) => row.title.includes("follow-up"))).toBe(true);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("backs existing manual notes into candidate durable memory while explicit saves become active", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await service.sync();
+
+      const legacyId = (service as any).repo.saveManualNote({
+        text: "We decided to keep migration rollback evidence attached to each batch",
+        title: "legacy decision note",
+        cwd: "/Users/chadsimon/code/my-project",
+        metadataJson: "{}",
+        createdAt: "2026-03-01T00:00:00.000Z",
+        createdAtEpoch: Date.parse("2026-03-01T00:00:00.000Z"),
+      });
+      await (service as any).backfillDurableMemoryCandidates();
+
+      const preExisting = await service.saveMemory({
+        text: "We decided to keep migrations single-writer and checkpoint every batch",
+        title: "migration decision",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      const rows = await service.getByIds([legacyId, preExisting]);
+      const legacy = rows.find((row) => row.id === legacyId);
+      const explicit = rows.find((row) => row.id === preExisting);
+
+      expect(legacy?.memoryStatus).toBeUndefined();
+      expect(explicit?.memoryStatus).toBe("active");
+
+      const candidates = (service as any).repo.listDurableMemoryCandidates();
+      expect(candidates.some((row: { observationId: number }) => row.observationId === legacyId)).toBe(true);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("runs retrieval benchmarks against the context-pack output", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await service.savePreference({
+        schema_version: "pref-note.v1",
+        key: "pref:tests.order",
+        scope: "project",
+        trigger: "When validating changes",
+        preferred: "Run tests before lint",
+        avoid: "Lint-only validation",
+        example_good: "vitest then lint",
+        example_bad: "lint only",
+        confidence: 0.95,
+        source: "user",
+        supersedes: [],
+        created_at: "2026-03-01T00:00:00.000Z",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.saveMemory({
+        text: "Root cause fixed: migration lock was missing before batch writes",
+        title: "migration fix",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      const cases: RetrievalBenchmarkCase[] = [
+        {
+          id: "pref-recall",
+          description: "Retrieve active coding preference",
+          cwd: "/Users/chadsimon/code/my-project",
+          query: "validation order",
+          expectedMemoryClasses: ["preference_note"],
+          expectedPreferenceKeys: ["pref:tests.order"],
+          minimumConfidenceBand: "medium",
+        },
+        {
+          id: "fix-recall",
+          description: "Retrieve known migration fix",
+          cwd: "/Users/chadsimon/code/my-project",
+          query: "migration lock root cause",
+          expectedMemoryClasses: ["fix_note"],
+          minimumConfidenceBand: "medium",
+        },
+      ];
+
+      const results = await service.runRetrievalBenchmark(cases);
+      expect(results.every((result) => result.passed)).toBe(true);
+    } finally {
+      service.close();
+    }
+  });
+
+  it("ranks in-scope durable memory ahead of cross-project memory", async () => {
+    const paths = createFixture();
+    seedCodexLogs(paths.codexHome);
+
+    const service = new MemoryService(paths);
+    try {
+      await service.saveMemory({
+        text: "Root cause fixed: in-scope schema lock issue",
+        title: "in-scope fix",
+        cwd: "/Users/chadsimon/code/my-project",
+      });
+
+      await service.saveMemory({
+        text: "Root cause fixed: unrelated schema lock issue in other repo",
+        title: "other repo fix",
+        cwd: "/Users/chadsimon/code/other-project",
+      });
+
+      const rows = await service.search({
+        cwd: "/Users/chadsimon/code/my-project",
+        query: "schema lock issue",
+        limit: 5,
+      });
+
+      expect(rows[0]?.cwd).toBe("/Users/chadsimon/code/my-project");
+      expect(rows[0]?.selectionReason).toContain("exact_scope_match");
     } finally {
       service.close();
     }

@@ -5,6 +5,11 @@ export interface ObservationRow {
   source: string;
   session_id: string;
   cwd: string;
+  workspace_root: string;
+  workspace_id: string;
+  visibility: string;
+  sensitivity: string;
+  scope_policy: string;
   role: string;
   type: ObservationType;
   title: string;
@@ -12,6 +17,13 @@ export interface ObservationRow {
   metadata_json: string;
   created_at: string;
   created_at_epoch: number;
+  memory_class?: string | null;
+  memory_status?: string | null;
+  trust_level?: number | null;
+  memory_scope?: string | null;
+  source_kind?: string | null;
+  related_paths_json?: string | null;
+  related_topics_json?: string | null;
 }
 
 export interface OffsetRow {
@@ -28,6 +40,8 @@ export interface AnchorRow {
 export interface SessionContextRow {
   session_id: string;
   cwd: string;
+  workspace_root: string;
+  workspace_id: string;
 }
 
 export interface StatsRow {
@@ -42,6 +56,8 @@ export interface StatsRow {
 
 export interface ProjectRow {
   cwd: string;
+  workspace_root: string;
+  workspace_id: string;
   observation_count: number;
   last_activity_epoch: number;
 }
@@ -49,8 +65,33 @@ export interface ProjectRow {
 export interface SessionRow {
   session_id: string;
   cwd: string;
+  workspace_root: string;
+  workspace_id: string;
   first_epoch: number;
   last_epoch: number;
   observation_count: number;
   last_title: string;
+}
+
+export interface DurableMemoryRow {
+  id: number;
+  observation_id: number;
+  memory_class: string;
+  title: string;
+  body: string;
+  cwd: string;
+  workspace_root: string;
+  workspace_id: string;
+  visibility: string;
+  sensitivity: string;
+  scope_policy: string;
+  trust_level: number;
+  scope: string;
+  source_kind: string;
+  supersedes_json: string;
+  related_paths_json: string;
+  related_topics_json: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }

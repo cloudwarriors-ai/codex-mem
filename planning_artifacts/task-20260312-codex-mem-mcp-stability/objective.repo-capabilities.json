@@ -1,0 +1,60 @@
+{
+  "capabilities": {
+    "build": true,
+    "lint": false,
+    "schema_check": false,
+    "security_sensitive_review": true,
+    "smoke_e2e": false,
+    "tests": true,
+    "typecheck": true
+  },
+  "confidence_by_lane": {
+    "build": "high",
+    "lint": "none",
+    "schema_check": "none",
+    "security_sensitive_review": "none",
+    "smoke_e2e": "none",
+    "tests": "high",
+    "typecheck": "high"
+  },
+  "detectors_run": [
+    "node_package_json"
+  ],
+  "lane_commands": {
+    "build": [
+      "npm run build"
+    ],
+    "lint": [],
+    "schema_check": [],
+    "security_sensitive_review": [],
+    "smoke_e2e": [],
+    "tests": [
+      "npm run test"
+    ],
+    "typecheck": [
+      "npm run typecheck"
+    ]
+  },
+  "missing_capabilities": {
+    "lint": "No deterministic repo capability discovered for lint.",
+    "schema_check": "No deterministic repo capability discovered for schema_check.",
+    "smoke_e2e": "No deterministic repo capability discovered for smoke_e2e."
+  },
+  "schema_version": "objective-repo-capabilities.v1",
+  "source_refs": {
+    "build": [
+      "/Users/chadsimon/code/codex-mem/package.json"
+    ],
+    "lint": [],
+    "schema_check": [],
+    "security_sensitive_review": [],
+    "smoke_e2e": [],
+    "tests": [
+      "/Users/chadsimon/code/codex-mem/package.json"
+    ],
+    "typecheck": [
+      "/Users/chadsimon/code/codex-mem/package.json"
+    ]
+  },
+  "workspace_root": "/Users/chadsimon/code/codex-mem"
+}

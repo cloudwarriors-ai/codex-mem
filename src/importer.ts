@@ -5,6 +5,12 @@ import { createInterface } from "node:readline";
 import type { ObservationInsert, SyncResult } from "./types.js";
 import { MemoryRepository } from "./db.js";
 import { createTitle, isHistoryFile, normalizeWhitespace, safeJsonParse, truncateText } from "./utils.js";
+import {
+  defaultScopePolicyForVisibility,
+  defaultSensitivityForIdentity,
+  defaultVisibilityForMemory,
+  resolveWorkspaceIdentity,
+} from "./workspace-identity.js";
 
 interface SessionState {
   sessionId: string;
@@ -49,6 +55,20 @@ export class CodexImporter {
       status: "ok",
       filesScanned: files.length,
       observationsInserted,
+    };
+  }
+
+  async dryProbe(): Promise<{ status: "ok"; filesScanned: number }> {
+    const files = collectSourceFiles(this.codexHome);
+    for (const filePath of files) {
+      if (!existsSync(filePath)) continue;
+      const stat = statSync(filePath);
+      const currentOffset = this.repo.getOffset(filePath);
+      normalizeOffset(stat.size, stat.mtimeMs, currentOffset);
+    }
+    return {
+      status: "ok",
+      filesScanned: files.length,
     };
   }
 
@@ -109,6 +129,11 @@ export class CodexImporter {
       source: `history:${basename(filePath)}`,
       sessionId: line.session_id ?? "",
       cwd: "",
+      workspaceRoot: "",
+      workspaceId: "unknown",
+      visibility: "workspace_only",
+      sensitivity: "restricted",
+      scopePolicy: "exact_workspace",
       role: "user",
       type: "user_message",
       title: createTitle(text),
@@ -252,10 +277,17 @@ export class CodexImporter {
       metadata?: Record<string, string>;
     },
   ): ObservationInsert {
+    const identity = resolveWorkspaceIdentity(context.cwd);
+    const visibility = defaultVisibilityForMemory();
     return {
       source: context.source,
       sessionId: context.sessionId,
       cwd: context.cwd,
+      workspaceRoot: identity.workspaceRoot,
+      workspaceId: identity.workspaceId,
+      visibility,
+      sensitivity: defaultSensitivityForIdentity(identity),
+      scopePolicy: defaultScopePolicyForVisibility(visibility),
       role: input.role,
       type: input.type,
       title: input.title,
